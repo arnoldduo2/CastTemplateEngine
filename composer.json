@@ -1,0 +1,29 @@
+{
+  "name": "arnoldduo2/cast-template-engine",
+  "description": "CastTemplateEngine: React-style components (tags, props, children, slots) on top of native PHP templates.",
+  "type": "library",
+  "license": "MIT",
+  "keywords": ["template", "templating", "components", "jsx", "php", "view", "cast"],
+  "homepage": "https://github.com/arnoldduo2/CastTemplateEngine",
+  "authors": [
+    { "name": "arnoldduo2", "email": "arnoldduo2@gmail.com" }
+  ],
+  "require": {
+    "php": ">=8.1"
+  },
+  "autoload": {
+    "psr-4": {
+      "CastTemplateEngine\\": "src/"
+    },
+    "files": [
+      "src/helpers.php"
+    ]
+  },
+  "scripts": {
+    "test": "php tests/run.php"
+  },
+  "config": {
+    "sort-packages": true
+  },
+  "minimum-stability": "stable"
+}

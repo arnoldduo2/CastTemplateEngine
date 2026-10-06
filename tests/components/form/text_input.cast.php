@@ -1,0 +1,5 @@
+<?php
+$type ??= 'text';
+$required ??= false;
+?>
+<input type="<?= e($type) ?>" name="<?= e($name) ?>" value="<?= e($value ?? '') ?>"<?= $required ? ' required' : '' ?>>
