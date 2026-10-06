@@ -1,5 +1,5 @@
 {
-  "name": "arnoldduo2/cast-template-engine",
+  "name": "anode/cast-template-engine",
   "description": "CastTemplateEngine: React-style components (tags, props, children, slots) on top of native PHP templates.",
   "type": "library",
   "license": "MIT",

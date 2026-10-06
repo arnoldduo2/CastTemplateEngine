@@ -36,7 +36,7 @@ CastTemplateEngine only adds a few things on top: component tags, children, name
 ## Install
 
 ```bash
-composer require arnoldduo2/cast-template-engine
+composer require anode/cast-template-engine
 ```
 
 Until the package is listed on Packagist, install it straight from GitHub by adding this to your
@@ -48,7 +48,7 @@ Until the package is listed on Packagist, install it straight from GitHub by add
 ]
 ```
 
-and then run `composer require arnoldduo2/cast-template-engine:^1.0`.
+and then run `composer require anode/cast-template-engine:^1.0`.
 
 ## Setup
 

@@ -2,6 +2,10 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 1.0.1
+
+- The Composer package is now `anode/cast-template-engine` (was `arnoldduo2/cast-template-engine`). No code changes.
+
 ## 1.0.0
 
 First release.
