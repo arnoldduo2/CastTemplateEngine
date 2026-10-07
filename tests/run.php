@@ -245,5 +245,25 @@ test('only the configured extension is compiled and resolved', function () {
     throws('Component <Plain> not found. Looked for: plain.tpl.php', fn() => $cast->render('page2'));
 });
 
+test('a template that starts with declare(strict_types=1) renders (the engine\'s own first line must not come before it)', function () {
+    same('<p>2</p>', squash(page("<?php\n\ndeclare(strict_types=1);\n\$n = 2;\n?>\n<p><?= \$n ?></p>")));
+    same('<p>2</p>', squash(page("<?php\n// a comment\ndeclare(strict_types=1);\n\$n = 2;\n?>\n<p><?= \$n ?></p>")));
+    same('<i>ok</i>', squash(page("<?php /* one */ declare(strict_types = 0); ?><i>ok</i>")));
+});
+
+test('strict types really apply to the template once hoisted', function () {
+    $out = page("<?php declare(strict_types=1);\nfunction takesInt(int \$x) { return \$x; }\ntry { takesInt('5'); echo 'loose'; } catch (TypeError \$e) { echo 'strict'; }\n?>");
+    same('strict', trim($out));
+});
+
+test('a component that starts with declare(strict_types=1) works too', function () {
+    global $tmp;
+    @mkdir("$tmp/comp", 0777, true);
+    file_put_contents("$tmp/comp/strict-one.cast.php", "<?php\n\ndeclare(strict_types=1);\n\$label ??= 'x';\n?>\n<em><?= \$label ?></em>");
+    $own = new CastTemplate("$tmp/comp", '.cast.php', ['viewsDir' => "$tmp/views", 'cacheDir' => "$tmp/cache2"]);
+    file_put_contents("$tmp/views/usesone.cast.php", '<StrictOne label="hi" />');
+    same('<em>hi</em>', squash($own->render('usesone')));
+});
+
 echo $failures ? "\n$failures failed\n" : "\nall passed\n";
 exit($failures ? 1 : 0);

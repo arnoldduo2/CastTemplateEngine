@@ -168,7 +168,18 @@ final class CastTemplate
             }
             $code = (new Compiler($this->componentsDir, $this->ext, $file))->compile((string) file_get_contents($file));
             $tmp = $target . '.' . bin2hex(random_bytes(4)) . '.tmp';
-            file_put_contents($tmp, "<?php /* $file */ ?>" . $code);
+            // PHP wants declare(strict_types) to be the first statement: the line this engine adds comes first, so move it up there
+            $declare = '';
+            $code = (string) preg_replace_callback(
+                '/\A(\s*<\?php\s+(?:(?:\/\*.*?\*\/|\/\/[^\n]*\n|#[^\n]*\n)\s*)*)declare\s*\(\s*strict_types\s*=\s*([01])\s*\)\s*;[ \t]*\R?/s',
+                function (array $m) use (&$declare): string {
+                    $declare = "declare(strict_types={$m[2]}); ";
+                    return $m[1];
+                },
+                $code,
+                1,
+            );
+            file_put_contents($tmp, "<?php {$declare}/* $file */ ?>" . $code);
             rename($tmp, $target);
         }
 

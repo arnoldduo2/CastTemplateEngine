@@ -2,6 +2,10 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 1.0.2
+
+- Fix: a view or component that starts with `<?php declare(strict_types=1);` stopped PHP with "strict_types declaration must be the very first statement", because the engine puts a line of its own before every compiled file. The declare is now moved to the front of the compiled file.
+
 ## 1.0.1
 
 - The Composer package is now `anode/cast-template-engine` (was `arnoldduo2/cast-template-engine`). No code changes.
