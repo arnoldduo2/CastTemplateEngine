@@ -171,7 +171,7 @@ final class CastTemplate
             // PHP wants declare(strict_types) to be the first statement: the line this engine adds comes first, so move it up there
             $declare = '';
             $code = (string) preg_replace_callback(
-                '/\A(\s*<\?php\s+(?:(?:\/\*.*?\*\/|\/\/[^\n]*\n|#[^\n]*\n)\s*)*)declare\s*\(\s*strict_types\s*=\s*([01])\s*\)\s*;[ \t]*\R?/s',
+                '/\A(\s*<\?php\s+(?:(?:\/\*.*?\*\/|\/\/[^\n]*\n|#[^\n]*\n)\s*)*)declare\s*\(\s*strict_types\s*=\s*([01])\s*\)\s*;[ \t]*/s',
                 function (array $m) use (&$declare): string {
                     $declare = "declare(strict_types={$m[2]}); ";
                     return $m[1];
@@ -214,8 +214,65 @@ final class CastTemplate
             while (ob_get_level() > $level) ob_end_clean();
             array_splice($this->stack, $stack);
             array_splice($this->slots, $slots);
+            self::pointToSource($e);
             throw $e;
         }
+    }
+
+    /**
+     * The template a compiled file came from, read from the first line the engine writes (`<?php /* source *\/ ?>`), or null
+     * when $file is not a compiled template. Compiled files keep the line numbers of their source.
+     */
+    public static function sourceOf(string $file): ?string
+    {
+        static $known = [];
+        if (array_key_exists($file, $known)) return $known[$file];
+        $head = is_file($file) ? (string) @file_get_contents($file, false, null, 0, 2048) : '';
+        return $known[$file] = preg_match('#^<\?php (?:declare\(strict_types=[01]\); )?/\* (.+?) \*/ \?>#', $head, $m) === 1 ? $m[1] : null;
+    }
+
+    /**
+     * An error inside a template is reported in the compiled copy under the cache folder. Point it at the template instead, so the
+     * error page and the logs show your view and its line, not `storage/framework/views/<hash>.php`: the exception's own file and
+     * line, the paths in its message, and every frame of its trace. Idempotent (a template already seen is left alone).
+     */
+    public static function pointToSource(\Throwable $e): void
+    {
+        $base = $e instanceof \Error ? \Error::class : \Exception::class;
+        $set = static function (string $property, mixed $value) use ($e, $base): void {
+            $p = new \ReflectionProperty($base, $property);
+            $p->setAccessible(true);
+            $p->setValue($e, $value);
+        };
+
+        $trace = $e->getTrace();
+        $changed = false;
+        foreach ($trace as $i => $frame) {
+            if (isset($frame['file']) && ($source = self::sourceOf($frame['file'])) !== null) {
+                $trace[$i]['file'] = $source;
+                $changed = true;
+            }
+        }
+
+        $file = $e->getFile();
+        $line = $e->getLine();
+        if (($source = self::sourceOf($file)) !== null) {
+            // thrown by the template itself (a warning turned into an exception, a compile error...)
+            [$file, $changed] = [$source, true];
+        } elseif (isset($trace[0]['file']) && self::sourceOf($e->getTrace()[0]['file'] ?? '') !== null) {
+            // thrown by a function the template called directly (a helper that rejects its argument): the cause is the call in the template
+            [$file, $line, $changed] = [$trace[0]['file'], (int) ($trace[0]['line'] ?? $line), true];
+        }
+        if (!$changed) return;
+
+        $message = $e->getMessage();
+        foreach (array_unique(array_filter(array_column($e->getTrace(), 'file'), fn($f) => self::sourceOf((string) $f) !== null)) as $compiled) {
+            $message = str_replace($compiled, (string) self::sourceOf($compiled), $message);
+        }
+        $set('trace', $trace);
+        $set('file', $file);
+        $set('line', $line);
+        $set('message', $message);
     }
 
     private static function isAbsolute(string $path): bool

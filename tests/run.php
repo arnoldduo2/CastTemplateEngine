@@ -265,5 +265,62 @@ test('a component that starts with declare(strict_types=1) works too', function 
     same('<em>hi</em>', squash($own->render('usesone')));
 });
 
+function takes_string(string $s): string { return $s; }
+
+test('an error in a template is reported in the template, not in the compiled copy', function () {
+    global $engine, $tmp;
+    // a warning-style error raised by the template itself, on line 3
+    file_put_contents("$tmp/views/err_a.cast.php", "<h1>Hi</h1>\n<p>ok</p>\n<?php throw new RuntimeException('boom in the view @ /x/' . basename(__FILE__)); ?>\n");
+    try {
+        $engine->render('err_a');
+        throw new Exception('did not throw');
+    } catch (RuntimeException $e) {
+        same("$tmp/views/err_a.cast.php", $e->getFile());
+        same('3', (string) $e->getLine());
+        foreach ($e->getTrace() as $frame) {
+            if (isset($frame['file']) && str_contains($frame['file'], '/cache/')) throw new Exception('a frame still points to the compiled copy: ' . $frame['file']);
+        }
+    }
+});
+
+test('a helper that rejects its argument is traced to the line of the template that called it', function () {
+    global $engine, $tmp;
+    file_put_contents("$tmp/views/err_b.cast.php", "<div>\n<b>one</b>\n<?= takes_string(null) ?>\n</div>\n");
+    try {
+        $engine->render('err_b');
+        throw new Exception('did not throw');
+    } catch (TypeError $e) {
+        same("$tmp/views/err_b.cast.php", $e->getFile());
+        same('3', (string) $e->getLine());
+        if (str_contains($e->getMessage(), '/cache/')) throw new Exception('message still names the compiled copy: ' . $e->getMessage());
+        if (!str_contains($e->getMessage(), "$tmp/views/err_b.cast.php")) throw new Exception('message does not name the template: ' . $e->getMessage());
+    }
+});
+
+test('errors in a component are traced to the component file and line', function () {
+    global $engine, $tmp;
+    file_put_contents("$tmp/views/err_c.cast.php", "<p>before</p>\n<Boom />\n");
+    @mkdir("$tmp/comp2", 0777, true);
+    file_put_contents("$tmp/comp2/boom.cast.php", "<?php\n\n\$x = takes_string(123 + 'a' === 1 ? 1 : null);\n");
+    $own = new CastTemplate("$tmp/comp2", '.cast.php', ['viewsDir' => "$tmp/views", 'cacheDir' => "$tmp/cache7"]);
+    try {
+        $own->render('err_c');
+        throw new Exception('did not throw');
+    } catch (Throwable $e) {
+        same("$tmp/comp2/boom.cast.php", $e->getFile());
+    }
+});
+
+test('a leading declare(strict_types) keeps the line numbers of the template', function () {
+    global $engine, $tmp;
+    file_put_contents("$tmp/views/err_d.cast.php", "<?php\n\ndeclare(strict_types=1);\n?>\n<p>x</p>\n<?php throw new LogicException('l6'); ?>\n");
+    try {
+        $engine->render('err_d');
+    } catch (LogicException $e) {
+        same("$tmp/views/err_d.cast.php", $e->getFile());
+        same('6', (string) $e->getLine());
+    }
+});
+
 echo $failures ? "\n$failures failed\n" : "\nall passed\n";
 exit($failures ? 1 : 0);
