@@ -302,7 +302,7 @@ Plain PHP works as before (`<?php ... ?>`, `<?= ... ?>`). For loops, conditions 
 
 ```php
 @for ($i = 0; $i < 10; $i++):
-    The current value is @{ $i }                 {{-- same as <?= $i ?> --}}
+    The current value is @{ $i }                 (same as <?= $i ?>)
 @endfor
 
 @foreach ($users as $user):
