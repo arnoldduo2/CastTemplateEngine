@@ -296,6 +296,47 @@ echo View::render('pages.invoice', ['invoice' => $invoice]);
 
 You can move to it one file at a time: rename a view or component to `.cast.php`, and nothing else changes.
 
+## The `@` shorthand for PHP
+
+Plain PHP works as before (`<?php ... ?>`, `<?= ... ?>`). For loops, conditions and printing there is a shorter form, handled before the component tags:
+
+```php
+@for ($i = 0; $i < 10; $i++):
+    The current value is @{ $i }                 {{-- same as <?= $i ?> --}}
+@endfor
+
+@foreach ($users as $user):
+    <p>This is user @{ $user->id }</p>
+@endforeach
+
+@forelse ($users as $user):
+    <li>@{ $user->name }</li>
+@empty
+    <p>No users</p>
+@endforelse
+
+@while ($row = next($rows))
+    <p>@{ $row }</p>
+@endwhile
+```
+
+| Write | Becomes |
+| --- | --- |
+| `@{ expr }` | `<?= expr ?>` (printed as it is, like `<?= ?>`: wrap user text in your escape function) |
+| `@for (...):` `@endfor` | `for (...): ... endfor;` |
+| `@foreach (...):` `@endforeach` | `foreach (...): ... endforeach;` |
+| `@forelse ($list as $item):` `@empty` `@endforelse` | a `foreach` plus an "nothing was looped" block; works with arrays, iterators and generators |
+| `@while (...)` `@endwhile` | `while (...): ... endwhile;` |
+| `@if (...)` `@elseif (...)` `@else` `@endif` | `if (...): ... elseif (...): ... else: ... endif;` |
+| `@unless (...)` `@endunless` | `if (!(...)):` |
+| `@isset ($x)` `@endisset` | `if (isset($x)):` |
+| `@switch ($n)` `@case (1)` `@default` `@endswitch` | `switch` (the gap between `@switch` and the first `@case` is allowed) |
+| `@break` `@continue`, or with a condition `@break($done)` `@continue($skip)` | `break;` `continue;` `if ($done) break;` |
+| `@php($n = 5)` and `@php ... @endphp` | one statement, or a block of plain PHP copied as it is |
+| `@@` | a literal `@` |
+
+The colon after the parentheses is optional. Any PHP works inside the parentheses (nested calls, arrays, strings with brackets). Left alone: `<?php ?>` blocks, CSS `@media` / `@import` and everything else inside `<style>` except `@{ }`, an `@` right after a letter, digit, dot or underscore (e-mail addresses), and words that are not directives. A directive never adds or removes a line, so errors still point at the right line of your template. Mistakes (`@endfor` with no `@for`, a `@foreach` that is never closed, `@break` outside a loop) are reported with the template and line.
+
 ## Coming from `useComponent()`
 
 | Before | After |

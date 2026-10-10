@@ -322,5 +322,120 @@ test('a leading declare(strict_types) keeps the line numbers of the template', f
     }
 });
 
+test('@{ } prints like <?= ?>, with nested braces, strings and method calls', function () {
+    same('<p>Hi Ann</p>', page('<p>Hi @{ $user->name }</p>', ['user' => (object) ['name' => 'Ann']]));
+    same('<p>b 2 }</p>', page("<p>@{ \$a['k'] } @{ count([1, 2]) } @{ '}' }</p>", ['a' => ['k' => 'b']]));
+    same('<p>x</p>', page('<p>@{$v}</p>', ['v' => 'x']));
+    same('<p>big</p>', page('<p>@{ $n > 3 ? "big" : "small" }</p>', ['n' => 5]));
+    same('<p><b>raw</b></p>', page('<p>@{ $h }</p>', ['h' => '<b>raw</b>']));
+});
+
+test('@for, @foreach and @while, with or without the colon, nested', function () {
+    same('<li>The current value is 0</li><li>The current value is 1</li><li>The current value is 2</li>', page("@for (\$i = 0; \$i < 3; \$i++):\n<li>The current value is @{ \$i }</li>\n@endfor"));
+    same('<li>0</li><li>1</li>', page('@for ($i = 0; $i < 2; $i++)<li>@{ $i }</li>@endfor'));
+    same('<p>This is user 1</p><p>This is user 2</p>', page("@foreach (\$users as \$user):\n<p>This is user @{ \$user->id }</p>\n@endforeach", ['users' => [(object) ['id' => 1], (object) ['id' => 2]]]));
+    same('a:1 b:2', page('@foreach ($m as $k => $v): @{ $k }:@{ $v } @endforeach', ['m' => ['a' => 1, 'b' => 2]]));
+    same('3 2 1', page('@while ($n > 0) @{ $n-- } @endwhile', ['n' => 3]));
+    same('1a 1b 2a 2b', page('@foreach ([1, 2] as $x): @foreach (["a", "b"] as $y): @{ $x }@{ $y } @endforeach @endforeach'));
+});
+
+test('@forelse ... @empty ... @endforelse', function () {
+    $tpl = "@forelse (\$users as \$user):\n<li>@{ \$user->name }</li>\n@empty\n<p>No users</p>\n@endforelse";
+    same('<li>Ann</li><li>Bo</li>', page($tpl, ['users' => [(object) ['name' => 'Ann'], (object) ['name' => 'Bo']]]));
+    same('<p>No users</p>', page($tpl, ['users' => []]));
+    same('<p>No users</p>', page($tpl, ['users' => new ArrayIterator([])]));
+    same('<li>Ann</li>', page($tpl, ['users' => (function () { yield (object) ['name' => 'Ann']; })()]), 'a generator is walked once');
+    same('x1 y', page('@forelse ($a as $i): x@{ $i } @empty none @endforelse @forelse ($b as $i): y @empty none @endforelse', ['a' => [1], 'b' => [1]]), 'two loops in a row keep their own flags');
+    same('x1 none', page('@forelse ($a as $i): x@{ $i } @empty A @endforelse @forelse ($b as $i): y @empty none @endforelse', ['a' => [1], 'b' => []]));
+    same('in:p out:none', page('@forelse ($o as $p): in:@{ $p } @forelse ([] as $q): q @empty out:none @endforelse @empty e @endforelse', ['o' => ['p']]), 'a @forelse inside a @forelse');
+    same('<li>1</li>', page('@forelse ($a as $i)<li>@{ $i }</li>@endforelse', ['a' => [1]]), 'no @empty block is fine');
+});
+
+test('@if, @elseif, @else, @endif, @break and @continue', function () {
+    $tpl = '@if ($n > 5): big @elseif ($n > 2): mid @else: small @endif';
+    same('big', page($tpl, ['n' => 9]));
+    same('mid', page($tpl, ['n' => 3]));
+    same('small', page($tpl, ['n' => 1]));
+    same('small', page('@if ($n > 5) big @else small @endif', ['n' => 1]));
+    same('1 2', page('@foreach ([1, 2, 3, 4] as $i) @if ($i > 2) @break @endif @{ $i } @endforeach'));
+    same('1 3', page('@foreach ([1, 2, 3] as $i) @continue($i === 2) @{ $i } @endforeach'));
+    same('1 2', page('@foreach ([1, 2, 3] as $i) @break($i === 3) @{ $i } @endforeach'));
+});
+
+test('mixed with components, <?php ?>, plain <?= ?> and nested parentheses', function () {
+    same('<div class="kpi"><div class="body">x</div></div><div class="kpi"><div class="body">y</div></div>', page('@foreach (["x", "y"] as $t): <KpiCard title="a">@{ $t }</KpiCard> @endforeach'));
+    same('1-2', page('<?php $a = [1, 2]; ?>@foreach ($a as $i)<?= $i ?>@if ($i === 1)-@endif@endforeach'));
+    same('ok', page("@if (in_array('a)', ['a)', 'b'])) ok @endif"));
+    same('a,b', page('@{ implode(",", array_map(fn($x) => strtolower($x), ["A", "B"])) }'));
+});
+
+test('left alone: @@, e-mail addresses, CSS @rules, <style> and <?php ?> blocks, unknown words', function () {
+    same('me@example.com', page('me@example.com'));
+    same('write @ me', page('write @ me'));
+    same('@for and @{x}', page('@@for and @@{x}'));
+    same('<style>@media (min-width: 1px) { a { color: red } }</style>', page('<style>@media (min-width: 1px) { a { color: red } }</style>'));
+    same('<style>a { color: #fff }</style>', page('<style>a { color: @{ "#fff" } }</style>'));
+    same('x @if', page('<?php echo "x @if"; ?>'));
+    same('@import @media', page('@import @media'));
+    same('hello@for.com', page('hello@for.com'));
+    same('<a href="/@user">me</a>', page('<a href="/@user">@{ $u }</a>', ['u' => 'me']));
+});
+
+test('a newline after @{ } is kept, and directives never move a line', function () {
+    global $engine, $tmp;
+    if (page("@{ 'a' }\nb\n") !== "a\nb\n") throw new Exception('the newline after @{ } was lost: ' . json_encode(page("@{ 'a' }\nb\n")));
+    file_put_contents("$tmp/views/dir_a.cast.php", "@foreach ([1] as \$i):\n  <p>@{ \$i }</p>\n@endforeach\n@if (true)\n<?php throw new LogicException('l5'); ?>\n@endif\n");
+    try {
+        $engine->render('dir_a');
+        throw new Exception('did not throw');
+    } catch (LogicException $e) {
+        same("$tmp/views/dir_a.cast.php", $e->getFile());
+        same('5', (string) $e->getLine());
+    }
+    file_put_contents("$tmp/views/dir_b.cast.php", "@foreach ([1] as \$i):\n  <p>@{ \$i\n  + 1 }</p>\n@endforeach\n<?php throw new LogicException('l5'); ?>\n");
+    try {
+        $engine->render('dir_b');
+    } catch (LogicException $e) {
+        same('5', (string) $e->getLine());
+    }
+});
+
+test('mistakes in directives are reported with the template and line', function () {
+    throws('@foreach is never closed in', fn() => page("<p>a</p>\n@foreach (\$x as \$y):\n<p>b</p>"));
+    throws('on line 2', fn() => page("<p>a</p>\n@foreach (\$x as \$y):\n<p>b</p>"));
+    throws('@endfor has no matching @for', fn() => page("<p>a</p>\n@endfor"));
+    throws('@endforeach has no matching @foreach (the open block is @for, from line 1', fn() => page("@for (\$i = 0; \$i < 1; \$i++):\n@endforeach"));
+    throws('@else has no matching @if', fn() => page('@else'));
+    throws('@empty has no matching @forelse', fn() => page('@foreach ([] as $a) @empty @endforeach'));
+    throws('@break is only allowed inside a loop', fn() => page('@break'));
+    throws('needs an expression in parentheses', fn() => page('@foreach $x as $y'));
+    throws('has nothing in it', fn() => page('@{ }'));
+    throws('has nothing in it', fn() => page('@if () x @endif'));
+    throws('a ( is never closed', fn() => page('@if ($a x @endif'));
+    throws('@empty is used twice', fn() => page('@forelse ([] as $a) @empty @empty @endforelse'));
+});
+
+test('@switch / @case / @default, @unless, @isset and @php', function () {
+    $tpl = "@switch (\$n):\n    @case (1)\n        one\n        @break\n    @case (2)\n    @case (3)\n        two or three\n        @break\n    @default\n        many\n@endswitch";
+    same('one', page($tpl, ['n' => 1]));
+    same('two or three', page($tpl, ['n' => 3]));
+    same('many', page($tpl, ['n' => 9]));
+    same('b', page("@switch (\$s) @case ('a') a @break @case ('b') b @break @endswitch", ['s' => 'b']));
+    same('1 many', page('@foreach ([1, 7] as $i) @switch ($i) @case (1) 1 @break @default many @endswitch @endforeach'));
+    same('shown', page('@unless ($hidden): shown @endunless', ['hidden' => false]));
+    same('', page('@unless ($hidden): shown @endunless', ['hidden' => true]));
+    same('else', page('@unless ($hidden): shown @else: else @endunless', ['hidden' => true]));
+    same('has', page('@isset ($x): has @endisset', ['x' => 1]));
+    same('none', page('@isset ($x): has @else none @endisset'));
+    same('7 7', page('@php($n = 7) @{ $n } @php $m = $n; @endphp @{ $m }'));
+    same('a;b', page("@php\n\$parts = ['a', 'b'];\n@endphp\n@{ implode(';', \$parts) }"));
+    same('@php @{ x }', page('<?php echo "@php @{ x }"; ?>'));
+    throws('@switch must be followed by @case or @default', fn() => page('@switch ($n) x @endswitch'));
+    throws('@case has no matching @switch', fn() => page('@case (1)'));
+    throws('@php is never closed', fn() => page('@php $a = 1;'));
+    throws('@endphp has no matching @php', fn() => page('@endphp'));
+    throws('@endswitch has no matching @switch', fn() => page('@endswitch'));
+});
+
 echo $failures ? "\n$failures failed\n" : "\nall passed\n";
 exit($failures ? 1 : 0);

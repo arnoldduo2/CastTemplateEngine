@@ -13,6 +13,8 @@ namespace CastTemplateEngine;
  *   <Slot name="left">html for the "left" prop</Slot>
  *   <option data-html={<Badge text={$name} />} disabled={$locked}>   (escaped)
  *
+ * The `@` shorthand for PHP (@{ $x }, @foreach (...): ... @endforeach, @if, @for, @while, @forelse) is Directives.
+ *
  * Left untouched: <?php ?>, <?= ?>, <script>, <style>, <!-- -->, text content.
  */
 final class Compiler
@@ -36,6 +38,7 @@ final class Compiler
 
     public function compile(string $source): string
     {
+        $source = (new Directives($this->file))->compile($source);     // @{ }, @foreach ... @endforeach
         $this->src = $source;
         $this->len = strlen($source);
         $this->pos = 0;

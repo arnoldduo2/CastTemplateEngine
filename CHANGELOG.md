@@ -2,6 +2,10 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 1.1.0
+
+- **The `@` shorthand for PHP**: `@{ $x }` for `<?= $x ?>`, and `@for`, `@foreach`, `@forelse` / `@empty`, `@while`, `@if` / `@elseif` / `@else`, `@unless`, `@isset`, `@switch` / `@case` / `@default`, `@break`, `@continue`, `@php` ... `@endphp`, each with its `@end...`. `@@` is a literal `@`. See the README. Plain PHP and everything written before keeps working; `<?php ?>` blocks, `<style>` rules like `@media`, and e-mail addresses are left alone. Line numbers are kept. Mistakes are reported with the template and line.
+
 ## 1.0.3
 
 - **Errors point at your template.** An error inside a template used to be reported in the compiled copy (`storage/framework/views/<hash>.php`), so error pages and logs named a file nobody wrote. The exception's file, line, message and every trace frame now name the template (or component) and its line. A helper that rejects its argument (`htchars(null)`) is reported at the line of the template that called it.
