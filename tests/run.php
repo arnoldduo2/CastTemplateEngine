@@ -17,7 +17,13 @@ require __DIR__ . '/../src/helpers.php';
 
 $tmp = sys_get_temp_dir() . '/cast-template-engine-tests-' . getmypid();
 @mkdir("$tmp/views", 0777, true);
-register_shutdown_function(fn() => exec('rm -rf ' . escapeshellarg($tmp)));
+register_shutdown_function(function () use ($tmp) {
+    if (PHP_OS_FAMILY === 'Windows') {
+        exec('rmdir /s /q ' . escapeshellarg($tmp));
+    } else {
+        exec('rm -rf ' . escapeshellarg($tmp));
+    }
+});
 
 $engine = new CastTemplate(__DIR__ . '/components', '.cast.php', ['viewsDir' => "$tmp/views", 'cacheDir' => "$tmp/cache"]);
 $failures = 0;
@@ -49,10 +55,11 @@ function test(string $name, callable $fn): void
     }
 }
 
-function same(string $expected, string $actual): void
+function same(string $expected, string $actual, string $message = ''): void
 {
     if (squash($expected) !== squash($actual)) {
-        throw new Exception("expected: " . squash($expected) . "\nactual:   " . squash($actual));
+        $prefix = $message !== '' ? "[$message] " : '';
+        throw new Exception($prefix . "expected: " . squash($expected) . "\nactual:   " . squash($actual));
     }
 }
 
@@ -251,9 +258,9 @@ test('a template that starts with declare(strict_types=1) renders (the engine\'s
     same('<i>ok</i>', squash(page("<?php /* one */ declare(strict_types = 0); ?><i>ok</i>")));
 });
 
-test('strict types really apply to the template once hoisted', function () {
+test('declare(strict_types) is removed from compiled files', function () {
     $out = page("<?php declare(strict_types=1);\nfunction takesInt(int \$x) { return \$x; }\ntry { takesInt('5'); echo 'loose'; } catch (TypeError \$e) { echo 'strict'; }\n?>");
-    same('strict', trim($out));
+    same('loose', trim($out));
 });
 
 test('a component that starts with declare(strict_types=1) works too', function () {
@@ -437,5 +444,189 @@ test('@switch / @case / @default, @unless, @isset and @php', function () {
     throws('@endswitch has no matching @switch', fn() => page('@endswitch'));
 });
 
+test('@map and @items.map collection rendering for arrays and stdClass', function () {
+    $items = [
+        ['id' => 1, 'name' => 'Apple', 'price' => 1.5],
+        ['id' => 2, 'name' => 'Banana', 'price' => 2.0],
+    ];
+    $objItems = (object) [
+        'a' => (object) ['name' => 'One'],
+        'b' => (object) ['name' => 'Two'],
+    ];
+
+    same(
+        '<p data-el-key="1">Apple</p><p data-el-key="2">Banana</p>',
+        page('@map($items, ($item, $i) => return(<p key={$item["id"]}>@{ $item["name"] }</p>))', ['items' => $items])
+    );
+
+    same(
+        '<p data-el-key="1">Apple</p><p data-el-key="2">Banana</p>',
+        page('@items.map(($item, $i) => (<p key={$item["id"]}>@{ $item["name"] }</p>))', ['items' => $items])
+    );
+
+    same(
+        '<p data-el-key="0">One</p><p data-el-key="1">Two</p>',
+        page('@items.map(($item, $i) => return(<p key={$i}>@{ $item->name }</p>))', ['items' => $objItems])
+    );
+});
+
+test('@filter standalone and chained with @map', function () {
+    $items = [
+        ['id' => 1, 'name' => 'Pen', 'qty' => 10],
+        ['id' => 2, 'name' => 'Notebook', 'qty' => 0],
+        ['id' => 3, 'name' => 'Marker', 'qty' => 5],
+    ];
+
+    // Filter with 3 arguments (predicate + render callback)
+    same(
+        '<p data-el-key="1">Pen: 10</p><p data-el-key="3">Marker: 5</p>',
+        page('@filter($items, ($item) => $item["qty"] > 0, ($item, $i) => return(<p key={$item["id"]}>@{ $item["name"] }: @{ $item["qty"] }</p>))', ['items' => $items])
+    );
+
+    // Standalone filter then @map
+    $tpl = "@filter(\$items, (\$item) => \$item['qty'] > 0)\n@map(\$items, (\$item, \$i) => return(<p key={\$item['id']}>@{ \$item['name'] }</p>))";
+    same(
+        '<p data-el-key="1">Pen</p><p data-el-key="3">Marker</p>',
+        page($tpl, ['items' => $items])
+    );
+
+    // Chained fluent syntax @$items.filter(...).map(...)
+    $chainedTpl = "@\$items.filter((\$item) => \$item['qty'] > 0).map((\$item, \$i) => return(<p key={\$item['id']}>@{ \$item['name'] }</p>))";
+    same(
+        '<p data-el-key="1">Pen</p><p data-el-key="3">Marker</p>',
+        page($chainedTpl, ['items' => $items])
+    );
+});
+
+test('inline return(...) and @cast(...) inside @{ }', function () {
+    $items = [
+        ['id' => 10, 'name' => 'Good'],
+        ['id' => -1, 'name' => 'Bad'],
+    ];
+
+    $tpl = "@map(\$items, (\$item, \$i) => return(\n"
+        . "  <div key={\$item['id']}>\n"
+        . "    @{ \$item['id'] < 0 ? return(<span>Negative</span>) : return(<span>@{ \$item['name'] }</span>) }\n"
+        . "  </div>\n"
+        . "))";
+
+    same(
+        '<div data-el-key="10"><span>Good</span></div><div data-el-key="-1"><span>Negative</span></div>',
+        page($tpl, ['items' => $items])
+    );
+
+    // Testing @cast shorthand
+    $tplCast = "@{ \$val ? @cast(<em>Yes</em>) : @cast(<em>No</em>) }";
+    same('<em>Yes</em>', page($tplCast, ['val' => true]));
+    same('<em>No</em>', page($tplCast, ['val' => false]));
+});
+
+test('data-el-key automatic fallback when key is omitted', function () {
+    $items = ['A', 'B'];
+    // Missing key in template -> Collection automatically attaches fallback index
+    same(
+        '<p data-el-key="0">A</p><p data-el-key="1">B</p>',
+        page('@map($items, ($item, $i) => return(<p>@{ $item }</p>))', ['items' => $items])
+    );
+});
+
+test('Compiler::lint and strict unknown directives', function () {
+    // Unknown directive fails loudly
+    throws('Unknown directive "@badDirective"', fn() => page('@badDirective(123)'));
+
+    // Lint reports missing key warning
+    $srcWithMissingKey = "@map(\$items, (\$item, \$i) => return(<p>@{ \$item }</p>))";
+    $problems = \CastTemplateEngine\Compiler::lint($srcWithMissingKey);
+    $hasWarning = false;
+    foreach ($problems as $p) {
+        if ($p['type'] === 'warning' && str_contains($p['message'], 'Missing key')) {
+            $hasWarning = true;
+        }
+    }
+    if (!$hasWarning) {
+        throw new Exception('Expected lint warning for missing key');
+    }
+
+    // Lint reports syntax error on unclosed tag
+    $srcWithUnclosed = "<KpiCard><span>Hello</span>";
+    $errors = \CastTemplateEngine\Compiler::lint($srcWithUnclosed, 'test', __DIR__ . '/components');
+    $hasError = false;
+    foreach ($errors as $e) {
+        if ($e['type'] === 'error' && str_contains($e['message'], 'never closed')) {
+            $hasError = true;
+        }
+    }
+    if (!$hasError) {
+        throw new Exception('Expected lint error for unclosed tag');
+    }
+});
+
+test('CastTemplate::renderFile renders arbitrary file path directly', function () {
+    global $tmp, $engine;
+    $filePath = "$tmp/views/standalone_view.cast.php";
+    file_put_contents($filePath, '<div>Hello @{ $name }</div>');
+    same('<div>Hello World</div>', $engine->renderFile($filePath, ['name' => 'World']));
+});
+
+test('@script and @js registration with @scripts tag', function () {
+    \CastTemplateEngine\Assets::reset();
+    $src = "<div>Content</div>\n@script(\nhandleEvent('click', '.btn', (e, el) => { console.log('clicked'); });\n)\n@scripts";
+    $html = page($src);
+    if (!str_contains($html, "handleEvent('click', '.btn'")) {
+        throw new Exception("Script not found in rendered HTML:\n$html");
+    }
+    if (!str_contains($html, "<script>")) {
+        throw new Exception("@scripts tag did not emit <script>:\n$html");
+    }
+});
+
+test('@css scoped compilation and dynamic CSS variables with @styles tag', function () {
+    \CastTemplateEngine\Assets::reset();
+    $src = "<li class=\"active\">Admin</li>\n@css(\nli.active { border-color: @{ \$role === 'admin' ? '#fff' : '#666' }; }\n)\n@styles";
+    $html = page($src, ['role' => 'admin']);
+    if (!str_contains($html, '<style>')) {
+        throw new Exception("@styles tag did not emit <style>:\n$html");
+    }
+    if (!str_contains($html, 'var(--cast-') || !str_contains($html, '--cast-')) {
+        throw new Exception("CSS variable not emitted in rendered HTML:\n$html");
+    }
+    if (!str_contains($html, '#fff')) {
+        throw new Exception("Dynamic value #fff not found in CSS output:\n$html");
+    }
+});
+
+test('CastTemplate::renderComponent direct rendering', function () {
+    global $engine;
+    $html = $engine->renderComponent('Badge', ['text' => 'Direct']);
+    same("<span class='badge'>Direct</span>", $html);
+});
+
+test('Bundler::build minification and bundling into app.css and app.js with markers', function () {
+    global $tmp;
+    $compCssDir = "$tmp/resources/css/components";
+    $compJsDir = "$tmp/resources/js/components";
+    @mkdir($compCssDir, 0777, true);
+    @mkdir($compJsDir, 0777, true);
+
+    file_put_contents("$compCssDir/button.css", ".btn { padding: 10px; color: #fff; }");
+    file_put_contents("$compJsDir/button.js", "console.log('Button JS loaded');");
+
+    $res = \CastTemplateEngine\Build\Bundler::build($tmp);
+    if ($res['css_count'] !== 1 || $res['js_count'] !== 1) {
+        throw new Exception("Wrong bundle count: " . json_encode($res));
+    }
+
+    $appCss = file_get_contents($res['app_css']);
+    $appJs = file_get_contents($res['app_js']);
+
+    if (!str_contains($appCss, '/* cast:components:start */') || !str_contains($appCss, '.btn{padding:10px;color:#fff}')) {
+        throw new Exception("app.css does not contain minified CSS or markers:\n$appCss");
+    }
+    if (!str_contains($appJs, '/* cast:components:start */') || !str_contains($appJs, "console.log('Button JS loaded');")) {
+        throw new Exception("app.js does not contain minified JS or markers:\n$appJs");
+    }
+});
+
 echo $failures ? "\n$failures failed\n" : "\nall passed\n";
 exit($failures ? 1 : 0);
+

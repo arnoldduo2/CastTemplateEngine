@@ -18,17 +18,18 @@ namespace CastTemplateEngine;
  *   @switch ($n): @case (1) ... @break @case (2) ... @break @default ... @endswitch
  *   @break  @continue  @break($done)  @continue($skip)       (break / continue, optionally with a condition)
  *   @php($n = 5)    and    @php ... @endphp                 a PHP statement, or a block of plain PHP (nothing inside is changed)
+ *   @map($items, ($item, $i) => return(<Card key={$i}>...</Card>))
+ *   @filter($items, ($item) => $item->qty > 0)
+ *   @$items.filter(...).map(...)
  *   @@                                      a literal @
  *
- * The colon after the closing parenthesis is optional. Anything PHP accepts in the parentheses works, including nested
- * parentheses, brackets and strings. Left alone: <?php ?> and <?= ?>, everything inside <style> except @{ }, an @ right after
- * a letter, digit, dot or underscore (e-mail addresses), and words that are not directives (@media, @import ...).
- * Line numbers are kept: a directive never adds or removes a line, so errors still point at the template line.
+ * Strict directive validation: unknown directives raise TemplateError with file and line.
  */
 final class Directives
 {
     private const OPEN = ['for', 'foreach', 'forelse', 'while', 'if'];
-    private const WORD = '(forelse|foreach|elseif|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|switch|unless|isset|default|empty|else|case|for|while|if|php|break|continue)';
+    private const WORD = '(forelse|foreach|elseif|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|switch|unless|isset|default|empty|else|case|for|while|if|php|break|continue|map|filter|scripts|styles|script|js|css)';
+    private const CSS_RULES = '(media|import|keyframes|charset|font-face|supports|page|namespace|layer|container|property|scope|starting-style|view-transition)';
 
     private string $src = '';
     private int $len = 0;
@@ -72,6 +73,7 @@ final class Directives
                 break;
             }
             [$token, $at] = $m[0];
+            $at = (int) $at;
             $out .= substr($this->src, $this->pos, $at - $this->pos);
             $this->pos = $at;
 
@@ -116,17 +118,34 @@ final class Directives
             return '@';                                  // an e-mail address, not ours
         }
 
-        if (!$directives || !preg_match('/\G@' . self::WORD . '\b/', $this->src, $m, 0, $p)) {
+        // CSS @rules
+        if (preg_match('/\G@' . self::CSS_RULES . '\b/i', $this->src, $m, 0, $p)) {
             $this->pos++;
-            return '@';                                  // @media, @import, a lone @
+            return '@';
         }
-        $word = $m[1];
+
         $line = substr_count($this->src, "\n", 0, $p) + 1;
+
+        // Check for chained collection calls: e.g. @$items.filter(...).map(...) or @items.map(...)
+        if (preg_match('/\G@(\$?[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(filter|map)\b/', $this->src, $m, 0, $p)) {
+            return $this->handleChain($m[1], $line);
+        }
+
+        if (!$directives || !preg_match('/\G@' . self::WORD . '\b/', $this->src, $m, 0, $p)) {
+            // If it looks like a directive call @foo(...) or an unclosed/unknown @end...
+            if (preg_match('/\G@([A-Za-z_][A-Za-z0-9_]*)(?:\s*\(|(?<=@end)[A-Za-z0-9_]+)/', $this->src, $unrecognized, 0, $p)) {
+                $this->fail("Unknown directive \"@{$unrecognized[1]}\"", $line);
+            }
+            $this->pos++;
+            return '@';
+        }
+
+        $word = $m[1];
         $this->pos = $p + strlen($m[0]);
 
         $arg = null;
         if ($word === 'php' && !preg_match('/\G[ \t]*\(/', $this->src, $_, 0, $this->pos)) return $this->phpBlock($line);
-        if (in_array($word, ['for', 'foreach', 'forelse', 'while', 'if', 'elseif', 'unless', 'isset', 'switch', 'case', 'php'], true)) {
+        if (in_array($word, ['for', 'foreach', 'forelse', 'while', 'if', 'elseif', 'unless', 'isset', 'switch', 'case', 'php', 'map', 'filter', 'script', 'js', 'css'], true)) {
             $arg = $this->parenthesised($word, $line);
         } elseif (in_array($word, ['break', 'continue'], true)) {
             $arg = $this->optionalParenthesised();
@@ -136,6 +155,35 @@ final class Directives
         $code = $this->emit($word, $arg, $line);
         $this->lastEnd = $this->pos;
         return $code;
+    }
+
+    /**
+     * Handles fluent collection chains: @$items.filter(...).map(...)
+     */
+    private function handleChain(string $varName, int $line): string
+    {
+        $var = str_starts_with($varName, '$') ? $varName : '$' . $varName;
+        // Skip @ and varName
+        $this->pos += 1 + strlen($varName);
+
+        $target = $var;
+
+        while (preg_match('/\G\s*\.\s*(filter|map)\b/', $this->src, $m, 0, $this->pos)) {
+            $method = $m[1];
+            $this->pos += strlen($m[0]);
+            $argsStr = $this->parenthesised($method, $line);
+            $parsed = $this->transformCallback($argsStr);
+
+            if ($method === 'filter') {
+                $target = "\\CastTemplateEngine\\Collection::filter($target, {$parsed['code']})";
+            } else {
+                $target = "\\CastTemplateEngine\\Collection::map($target, {$parsed['code']})";
+            }
+        }
+
+        $this->optionalColon();
+        $this->lastEnd = $this->pos;
+        return "<?= $target ?>";
     }
 
     /** `@php ... @endphp`: the code between is copied as it is. */
@@ -210,6 +258,52 @@ final class Directives
                 $top = $this->expect(['forelse'], $word, $line);
                 array_pop($this->stack);
                 return $top[3] ? '<?php endif; ?>' : '<?php endforeach; ?>';       // no @empty block: just close the loop
+            case 'map':
+                $args = $this->splitArguments((string) $arg);
+                if (count($args) < 2) {
+                    $this->fail('@map expects at least 2 arguments: @map($collection, ($item, $i) => ...)', $line);
+                }
+                $collection = $args[0];
+                $callback = $this->transformCallback($args[1]);
+                return "<?= \\CastTemplateEngine\\Collection::map($collection, {$callback['code']}) ?>";
+            case 'filter':
+                $args = $this->splitArguments((string) $arg);
+                if (count($args) < 2) {
+                    $this->fail('@filter expects at least 2 arguments: @filter($collection, ($item) => condition)', $line);
+                }
+                $collection = $args[0];
+                $predicate = $this->transformCallback($args[1]);
+
+                if (count($args) >= 3) {
+                    $render = $this->transformCallback($args[2]);
+                    return "<?= \\CastTemplateEngine\\Collection::filter($collection, {$predicate['code']}, {$render['code']}) ?>";
+                }
+
+                // Standalone in-place filter
+                return "<?php $collection = \\CastTemplateEngine\\Collection::filter($collection, {$predicate['code']}); ?>";
+            case 'script':
+            case 'js':
+                $id = substr(md5((string) $arg), 0, 8);
+                $escaped = var_export((string) $arg, true);
+                return "<?php \\CastTemplateEngine\\Assets::addScript('$id', $escaped); ?>";
+            case 'css':
+                $compiled = \CastTemplateEngine\Css::compileBody((string) $arg, $this->file, $line);
+                $id = $compiled['id'];
+                $scoped = \CastTemplateEngine\Css::scope($compiled['css'], ".cast-$id");
+                $escapedScoped = var_export($scoped, true);
+                if (empty($compiled['holes'])) {
+                    return "<?php \\CastTemplateEngine\\Assets::addStyle('$id', $escapedScoped); ?>";
+                }
+                $varAssignments = [];
+                foreach ($compiled['holes'] as $k => $expr) {
+                    $varAssignments[] = "'--cast-$id-$k: ' . ($expr)";
+                }
+                $varCode = implode(" . '; ' . ", $varAssignments);
+                return "<?php \\CastTemplateEngine\\Assets::addStyle('$id', $escapedScoped); echo '<style>.cast-$id { ' . $varCode . '; }</style>'; ?>";
+            case 'scripts':
+                return "<?= \\CastTemplateEngine\\Assets::renderScripts() ?>";
+            case 'styles':
+                return "<?= \\CastTemplateEngine\\Assets::renderStyles() ?>";
             default:                                                                // break, continue
                 $this->expectInside(['for', 'foreach', 'forelse', 'while', 'switch'], $word, $line);
                 return $arg === null || $arg === '' ? "<?php $word; ?>" : "<?php if ($arg) $word; ?>";
@@ -220,8 +314,182 @@ final class Directives
     private function echo(string $code): string
     {
         if ($code === '') $this->fail('@{ } has nothing in it');
+        $code = $this->transformInlineRender($code);
         $newline = substr($this->src, $this->pos, 2) === "\r\n" ? 2 : (($this->src[$this->pos] ?? '') === "\n" ? 1 : 0);
         return $newline ? "<?= $code, \"\\n\" ?>" : "<?= $code ?>";
+    }
+
+    /**
+     * Transforms return(...) or @cast(...) inside an expression into an immediately-evaluated output buffer closure.
+     */
+    private function transformInlineRender(string $code): string
+    {
+        $pattern = '/(?:return|@cast)\s*\(/';
+        while (preg_match($pattern, $code, $m, PREG_OFFSET_CAPTURE)) {
+            $offset = $m[0][1];
+            $openParen = $offset + strlen($m[0][0]) - 1;
+            $len = strlen($code);
+            $depth = 1;
+            $closeParen = -1;
+            $inQuote = false;
+            $quoteChar = '';
+
+            for ($i = $openParen + 1; $i < $len; $i++) {
+                $c = $code[$i];
+                if ($inQuote) {
+                    if ($c === '\\') { $i++; continue; }
+                    if ($c === $quoteChar) $inQuote = false;
+                    continue;
+                }
+                if ($c === '"' || $c === "'") {
+                    $inQuote = true;
+                    $quoteChar = $c;
+                    continue;
+                }
+                if ($c === '(') $depth++;
+                elseif ($c === ')' && --$depth === 0) {
+                    $closeParen = $i;
+                    break;
+                }
+            }
+
+            if ($closeParen === -1) break;
+
+            $markup = substr($code, $openParen + 1, $closeParen - $openParen - 1);
+            $compiled = (new Directives($this->file))->compile($markup);
+            $replacement = '((function($__v) { extract($__v); ob_start(); ?>' . $compiled . '<?php return ob_get_clean(); })(get_defined_vars()))';
+
+            $code = substr_replace($code, $replacement, (int) $offset, (int) ($closeParen - $offset + 1));
+        }
+
+        return $code;
+    }
+
+    /**
+     * Splits top-level arguments by comma.
+     * @return list<string>
+     */
+    private function splitArguments(string $code): array
+    {
+        $args = [];
+        $current = '';
+        $len = strlen($code);
+        $depthParen = 0;
+        $depthBrace = 0;
+        $depthBracket = 0;
+        $inQuote = false;
+        $quoteChar = '';
+
+        for ($i = 0; $i < $len; $i++) {
+            $c = $code[$i];
+            if ($inQuote) {
+                if ($c === '\\') {
+                    $current .= $c . ($code[++$i] ?? '');
+                    continue;
+                }
+                if ($c === $quoteChar) $inQuote = false;
+                $current .= $c;
+                continue;
+            }
+            if ($c === '"' || $c === "'") {
+                $inQuote = true;
+                $quoteChar = $c;
+                $current .= $c;
+                continue;
+            }
+            if ($c === '(') $depthParen++;
+            elseif ($c === ')') $depthParen--;
+            elseif ($c === '{') $depthBrace++;
+            elseif ($c === '}') $depthBrace--;
+            elseif ($c === '[') $depthBracket++;
+            elseif ($c === ']') $depthBracket--;
+            elseif ($c === ',' && $depthParen === 0 && $depthBrace === 0 && $depthBracket === 0) {
+                $args[] = trim($current);
+                $current = '';
+                continue;
+            }
+            $current .= $c;
+        }
+        if (trim($current) !== '') {
+            $args[] = trim($current);
+        }
+        return $args;
+    }
+
+    /**
+     * Transforms an arrow or native callback into executable PHP closure code.
+     * @return array{type: string, code: string}
+     */
+    private function transformCallback(string $cb): array
+    {
+        $cb = trim($cb);
+
+        if (preg_match('/^(?:(?:\(([^)]*)\)|(\$[A-Za-z0-9_]+)))\s*=>\s*(.*)$/s', $cb, $m)) {
+            $rawParams = trim($m[1] !== '' ? $m[1] : $m[2]);
+            $body = trim($m[3]);
+            $cleanParams = $this->normalizeParams($rawParams);
+
+            if (preg_match('/^return\s*\((.*)\)\s*;?$/s', $body, $bm)) {
+                $markup = $bm[1];
+                $compiled = (new Directives($this->file))->compile($markup);
+                return [
+                    'type' => 'render',
+                    'code' => "function($cleanParams) { ob_start(); ?>" . $compiled . "<?php return ob_get_clean(); }"
+                ];
+            }
+            if (preg_match('/^\((.*)\)\s*;?$/s', $body, $bm) && preg_match('/^\s*</', $bm[1])) {
+                $markup = $bm[1];
+                $compiled = (new Directives($this->file))->compile($markup);
+                return [
+                    'type' => 'render',
+                    'code' => "function($cleanParams) { ob_start(); ?>" . $compiled . "<?php return ob_get_clean(); }"
+                ];
+            }
+            if (str_starts_with($body, '<')) {
+                $compiled = (new Directives($this->file))->compile($body);
+                return [
+                    'type' => 'render',
+                    'code' => "function($cleanParams) { ob_start(); ?>" . $compiled . "<?php return ob_get_clean(); }"
+                ];
+            }
+
+            return [
+                'type' => 'predicate',
+                'code' => "fn($cleanParams) => ($body)"
+            ];
+        }
+
+        return [
+            'type' => 'native',
+            'code' => $cb
+        ];
+    }
+
+    private function normalizeParams(string $params): string
+    {
+        $parts = array_filter(array_map('trim', explode(',', $params)));
+        if (empty($parts)) {
+            return '$item = null, $i = 0, $key = null';
+        }
+
+        $normalized = [];
+        foreach ($parts as $idx => $part) {
+            $var = str_starts_with($part, '$') ? $part : '$' . $part;
+            if ($idx === 1) {
+                $normalized[] = "$var = 0";
+            } elseif ($idx === 2) {
+                $normalized[] = "$var = null";
+            } else {
+                $normalized[] = $var;
+            }
+        }
+        if (count($normalized) === 1) {
+            $normalized[] = '$i = 0';
+            $normalized[] = '$key = null';
+        } elseif (count($normalized) === 2) {
+            $normalized[] = '$key = null';
+        }
+        return implode(', ', $normalized);
     }
 
     // ------------------------------------------------------------------ parsing

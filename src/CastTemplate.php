@@ -19,7 +19,7 @@ namespace CastTemplateEngine;
  */
 final class CastTemplate
 {
-    public const VERSION = '1.0.1';
+    public const VERSION = '1.5.0';
 
     private const OPTIONS = ['viewsDir', 'cacheDir', 'checkModified', 'shared'];
 
@@ -85,6 +85,19 @@ final class CastTemplate
         return $this->guard(fn() => $this->evaluate($this->compile($file), $data));
     }
 
+    /** Renders an arbitrary .cast.php template file by its absolute path. */
+    public function renderFile(string $file, array $data = []): string
+    {
+        if (!is_file($file)) throw new TemplateError("Template file not found at $file");
+        return $this->guard(fn() => $this->evaluate($this->compile($file), $data));
+    }
+
+    /** Renders a component directly by tag name or path. */
+    public function renderComponent(string $name, array $props = []): string
+    {
+        return $this->guard(fn() => $this->component($name, $props));
+    }
+
     // ------------------------------------------------- called by compiled code
 
     /** `<Badge ... />` */
@@ -92,6 +105,40 @@ final class CastTemplate
     {
         $props = self::camelKeys($props);
         $props['children'] ??= '';
+
+        // Auto-register matching component CSS and JS files if present
+        $norm = str_replace(['/', '\\'], '.', $path);
+        $searchDirs = [
+            dirname($this->componentsDir) . '/css/components',
+            dirname($this->componentsDir) . '/resources/css/components',
+        ];
+        if ($this->viewsDir !== null) {
+            $searchDirs[] = $this->viewsDir . '/css/components';
+            $searchDirs[] = dirname($this->viewsDir) . '/resources/css/components';
+        }
+        foreach ($searchDirs as $sDir) {
+            $cssFile = $sDir . '/' . $norm . '.css';
+            if (is_file($cssFile)) {
+                Assets::addComponentCssFile($cssFile);
+                break;
+            }
+        }
+        $jsSearchDirs = [
+            dirname($this->componentsDir) . '/js/components',
+            dirname($this->componentsDir) . '/resources/js/components',
+        ];
+        if ($this->viewsDir !== null) {
+            $jsSearchDirs[] = $this->viewsDir . '/js/components';
+            $jsSearchDirs[] = dirname($this->viewsDir) . '/resources/js/components';
+        }
+        foreach ($jsSearchDirs as $sDir) {
+            $jsFile = $sDir . '/' . $norm . '.js';
+            if (is_file($jsFile)) {
+                Assets::addComponentJsFile($jsFile);
+                break;
+            }
+        }
+
         $file = $this->componentsDir . '/' . $path . $this->ext;
         return $this->evaluate($this->compile($file), $props, true);
     }
@@ -168,18 +215,14 @@ final class CastTemplate
             }
             $code = (new Compiler($this->componentsDir, $this->ext, $file))->compile((string) file_get_contents($file));
             $tmp = $target . '.' . bin2hex(random_bytes(4)) . '.tmp';
-            // PHP wants declare(strict_types) to be the first statement: the line this engine adds comes first, so move it up there
-            $declare = '';
-            $code = (string) preg_replace_callback(
-                '/\A(\s*<\?php\s+(?:(?:\/\*.*?\*\/|\/\/[^\n]*\n|#[^\n]*\n)\s*)*)declare\s*\(\s*strict_types\s*=\s*([01])\s*\)\s*;[ \t]*/s',
-                function (array $m) use (&$declare): string {
-                    $declare = "declare(strict_types={$m[2]}); ";
-                    return $m[1];
-                },
+            // Strip any declare(strict_types) so compiled files contain only the file path comment
+            $code = (string) preg_replace(
+                '/\A(\s*<\?php\s+(?:(?:\/\*.*?\*\/|\/\/[^\n]*\n|#[^\n]*\n)\s*)*)declare\s*\(\s*strict_types\s*=\s*[01]\s*\)\s*;[ \t]*/s',
+                '$1',
                 $code,
                 1,
             );
-            file_put_contents($tmp, "<?php {$declare}/* $file */ ?>" . $code);
+            file_put_contents($tmp, "<?php /* $file */ ?>" . $code);
             rename($tmp, $target);
         }
 

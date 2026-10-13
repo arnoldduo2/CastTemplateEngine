@@ -231,16 +231,19 @@ final class Compiler
 
             if ($c === '{') {
                 $expr = $this->expression($this->braces());
-                $this->emit('<?= $this->attr(' . var_export($attr, true) . ", ($expr)) ?>", $start);
+                $emitAttr = ($attr === 'key') ? 'data-el-key' : $attr;
+                $this->emit('<?= $this->attr(' . var_export($emitAttr, true) . ", ($expr)) ?>", $start);
             } elseif ($c === '"' || $c === "'") {
                 $line = $this->line($this->pos);
                 $value = $this->quoted($c);
                 $this->noTagsInQuotes($value, $attr, $line);
-                $this->out .= "$attr$before=$after$c$value$c";
+                $emitAttr = ($attr === 'key') ? 'data-el-key' : $attr;
+                $this->out .= "$emitAttr$before=$after$c$value$c";
             } else {
                 preg_match('/\G[^\s>]*/', $this->src, $v, 0, $this->pos);
                 $this->pos += strlen($v[0]);
-                $this->out .= "$attr$before=$after$v[0]";
+                $emitAttr = ($attr === 'key') ? 'data-el-key' : $attr;
+                $this->out .= "$emitAttr$before=$after$v[0]";
             }
         }
         return true;
@@ -446,5 +449,58 @@ final class Compiler
     {
         $line ??= $this->line($this->pos);
         throw new TemplateError("$message in {$this->file} on line $line");
+    }
+
+    /**
+     * Statically lints a Cast template source without executing PHP.
+     * Returns a list of errors and warnings.
+     *
+     * @return list<array{type: 'error'|'warning', message: string, line: int, file: string}>
+     */
+    public static function lint(string $source, string $file = 'template', string $componentsDir = ''): array
+    {
+        $problems = [];
+
+        // Check for missing key={...} in @map / @filter calls
+        $lines = explode("\n", $source);
+        foreach ($lines as $lineNum => $lineContent) {
+            if (preg_match('/(?:@map|@filter|\.map)\s*\(/', $lineContent)) {
+                // If a component or HTML tag is rendered inside without key= or data-el-key=
+                if (preg_match('/<([A-Za-z0-9_\-.:]+)/', $lineContent, $tm) && !str_contains($lineContent, 'key=') && !str_contains($lineContent, 'data-el-key=')) {
+                    $problems[] = [
+                        'type' => 'warning',
+                        'message' => 'Missing key: Provide a unique "key={...}" for mapped items to ensure stable identity and prevent UI glitches.',
+                        'line' => $lineNum + 1,
+                        'file' => $file,
+                    ];
+                }
+            }
+        }
+
+        // Check directive and template syntax compilation
+        try {
+            $compiler = new self($componentsDir ?: sys_get_temp_dir(), '.cast.php', $file);
+            $compiler->compile($source);
+        } catch (TemplateError $e) {
+            $line = 1;
+            if (preg_match('/on line (\d+)/', $e->getMessage(), $m)) {
+                $line = (int) $m[1];
+            }
+            $problems[] = [
+                'type' => 'error',
+                'message' => $e->getMessage(),
+                'line' => $line,
+                'file' => $file,
+            ];
+        } catch (\Throwable $e) {
+            $problems[] = [
+                'type' => 'error',
+                'message' => $e->getMessage(),
+                'line' => 1,
+                'file' => $file,
+            ];
+        }
+
+        return $problems;
     }
 }

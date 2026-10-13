@@ -1,0 +1,30 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Autoload CastTemplateEngine
+$autoloaders = [
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../autoload.php',
+];
+$loaded = false;
+foreach ($autoloaders as $autoloader) {
+    if (file_exists($autoloader)) {
+        require_once $autoloader;
+        $loaded = true;
+        break;
+    }
+}
+if (!$loaded || !class_exists('CastTemplateEngine\CastTemplate')) {
+    spl_autoload_register(function (string $class) {
+        $prefix = 'CastTemplateEngine\\';
+        if (str_starts_with($class, $prefix)) {
+            $file = __DIR__ . '/../src/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
+            if (file_exists($file)) require_once $file;
+        }
+    });
+    require_once __DIR__ . '/../src/helpers.php';
+}
+
+exit(\CastTemplateEngine\Console\ConsoleApplication::run($argv));

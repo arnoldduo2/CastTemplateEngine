@@ -1,0 +1,327 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "CastFramework template syntax",
+  "scopeName": "cast.injection",
+  "injectionSelector": "L:text.html.php - (meta.embedded | source.php | comment | string.quoted | source.js | source.css), L:text.html.php meta.tag - (meta.embedded | source.php | comment | string.quoted), L:meta.embedded.expression.cast - (comment | string)",
+  "patterns": [
+    {
+      "include": "#directive-escape"
+    },
+    {
+      "include": "#directive-echo"
+    },
+    {
+      "include": "#directive"
+    },
+    {
+      "include": "#component-close"
+    },
+    {
+      "include": "#component-open"
+    },
+    {
+      "include": "#brace-attribute"
+    }
+  ],
+  "repository": {
+    "component-close": {
+      "match": "(</)(Slot|[A-Z][A-Za-z0-9_]*(?:\\.[A-Z][A-Za-z0-9_]*)*)(\\s*)(>)",
+      "name": "meta.tag.component.close.cast",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.tag.begin.cast"
+        },
+        "2": {
+          "patterns": [
+            {
+              "include": "#tag-name"
+            }
+          ]
+        },
+        "4": {
+          "name": "punctuation.definition.tag.end.cast"
+        }
+      }
+    },
+    "component-open": {
+      "begin": "(<)(Slot|[A-Z][A-Za-z0-9_]*(?:\\.[A-Z][A-Za-z0-9_]*)*)(?=[\\s/>])",
+      "end": "(/?>)",
+      "name": "meta.tag.component.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.begin.cast"
+        },
+        "2": {
+          "patterns": [
+            {
+              "include": "#tag-name"
+            }
+          ]
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.end.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#attribute-string"
+        },
+        {
+          "include": "#spread-attribute"
+        },
+        {
+          "include": "#brace-attribute"
+        },
+        {
+          "include": "#attribute-name"
+        }
+      ]
+    },
+    "tag-name": {
+      "patterns": [
+        {
+          "match": "\\bSlot\\b",
+          "name": "entity.name.tag.slot.cast keyword.control.slot.cast"
+        },
+        {
+          "match": "\\.",
+          "name": "punctuation.separator.namespace.cast"
+        },
+        {
+          "match": "[A-Z][A-Za-z0-9_]*",
+          "name": "entity.name.tag.component.cast support.class.component.cast"
+        }
+      ]
+    },
+    "attribute-name": {
+      "patterns": [
+        {
+          "match": "=",
+          "name": "punctuation.separator.key-value.cast"
+        },
+        {
+          "match": "[A-Za-z_:@][-A-Za-z0-9_:.@]*",
+          "name": "entity.other.attribute-name.cast"
+        }
+      ]
+    },
+    "attribute-string": {
+      "patterns": [
+        {
+          "begin": "\"",
+          "end": "\"",
+          "name": "string.quoted.double.cast",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.cast"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.cast"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#embedded-php"
+            }
+          ]
+        },
+        {
+          "begin": "'",
+          "end": "'",
+          "name": "string.quoted.single.cast",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.cast"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.cast"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#embedded-php"
+            }
+          ]
+        }
+      ]
+    },
+    "embedded-php": {
+      "begin": "<\\?(?:=|php)?",
+      "end": "\\?>",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.begin.php"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.php"
+        }
+      },
+      "contentName": "meta.embedded.line.php",
+      "patterns": [
+        {
+          "include": "source.php"
+        }
+      ]
+    },
+    "spread-attribute": {
+      "begin": "(\\{)\\s*(?=\\.\\.\\.)",
+      "end": "\\}",
+      "name": "meta.attribute.spread.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "match": "\\.\\.\\.",
+          "name": "keyword.operator.spread.cast"
+        },
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "brace-attribute": {
+      "begin": "(?<==)\\s*(\\{)",
+      "end": "\\}",
+      "name": "meta.attribute.expression.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "php-expression": {
+      "patterns": [
+        {
+          "include": "#component-open"
+        },
+        {
+          "begin": "\\{",
+          "end": "\\}",
+          "patterns": [
+            {
+              "include": "#php-expression"
+            }
+          ]
+        },
+        {
+          "include": "source.php"
+        }
+      ]
+    },
+    "directive-escape": {
+      "match": "@@",
+      "name": "constant.character.escape.directive.cast"
+    },
+    "directive-echo": {
+      "begin": "(@)(\\{)",
+      "end": "\\}",
+      "name": "meta.directive.echo.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+        },
+        "2": {
+          "name": "punctuation.section.embedded.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "directive": {
+      "begin": "(?<![\\w.@])(@)(for|foreach|forelse|while|if|elseif|unless|isset|switch|case|php|break|continue|else|empty|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|default|map|filter|script|js|css|scripts|styles)\\b",
+      "end": "(?<=\\))(?:[ \\t]*(:))?|(?![ \\t(])",
+      "name": "meta.directive.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+        },
+        "2": {
+          "name": "keyword.control.directive.cast"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.separator.directive.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#directive-arguments"
+        }
+      ]
+    },
+    "directive-arguments": {
+      "begin": "\\(",
+      "end": "\\)",
+      "name": "meta.directive.arguments.cast",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "include": "#paren-group"
+        },
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "paren-group": {
+      "begin": "\\(",
+      "end": "\\)",
+      "patterns": [
+        {
+          "include": "#paren-group"
+        },
+        {
+          "include": "#php-expression"
+        }
+      ]
+    }
+  }
+}

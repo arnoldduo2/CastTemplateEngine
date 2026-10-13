@@ -26,8 +26,13 @@ CastTemplateEngine only adds a few things on top: component tags, children, name
 - [Setup](#setup)
 - [Writing components](#writing-components)
 - [Syntax rules](#syntax-rules)
+- [Reactive Scripts & Event Handling](#reactive-scripts--event-handling)
+- [Scoped CSS & Dynamic Variables](#scoped-css--dynamic-variables)
+- [Component Assets & Bundler](#component-assets--bundler)
 - [Escaping](#escaping)
 - [Caching and errors](#caching-and-errors)
+- [Terminal Commands & CLI](#terminal-commands--cli)
+- [Documentation Snippets List](#documentation-snippets-list)
 - [Limitations](#limitations)
 - [Wiring it into an app](#wiring-it-into-an-app)
 - [Coming from `useComponent()`](#coming-from-usecomponent)
@@ -333,9 +338,168 @@ Plain PHP works as before (`<?php ... ?>`, `<?= ... ?>`). For loops, conditions 
 | `@switch ($n)` `@case (1)` `@default` `@endswitch` | `switch` (the gap between `@switch` and the first `@case` is allowed) |
 | `@break` `@continue`, or with a condition `@break($done)` `@continue($skip)` | `break;` `continue;` `if ($done) break;` |
 | `@php($n = 5)` and `@php ... @endphp` | one statement, or a block of plain PHP copied as it is |
+| `@script(...)` or `@js(...)` | client-side reactive JavaScript captured for component |
+| `@scripts` | outputs all collected component scripts and runtime before `</body>` |
+| `@css(...)` | scoped component styles with dynamic `@{ ... }` CSS variables |
+| `@styles` | outputs all collected component styles in `<head>` |
+| `@map($items, ($item, $i) => return(<Card key={$i}>...</Card>))` | loops over arrays or `stdClass` objects and renders markup |
+| `@$items.map(($item, $i) => (<Card key={$i}>...</Card>))` | method-chaining shorthand on collections |
+| `@filter($items, ($item) => condition)` | standalone in-place collection filtering |
+| `@filter($items, predicate, mapCallback)` | filters and maps in one call |
+| `@$items.filter(...).map(...)` | fluent filter-then-map chain on arrays / objects |
+| `@{ $cond ? @cast(<p>Yes</p>) : @cast(<p>No</p>) }` | inline conditional Cast markup inside expressions |
 | `@@` | a literal `@` |
 
-The colon after the parentheses is optional. Any PHP works inside the parentheses (nested calls, arrays, strings with brackets). Left alone: `<?php ?>` blocks, CSS `@media` / `@import` and everything else inside `<style>` except `@{ }`, an `@` right after a letter, digit, dot or underscore (e-mail addresses), and words that are not directives. A directive never adds or removes a line, so errors still point at the right line of your template. Mistakes (`@endfor` with no `@for`, a `@foreach` that is never closed, `@break` outside a loop) are reported with the template and line.
+### Keys and `data-el-key`
+
+Every item rendered in a map or filter should provide a unique `key`:
+```php
+@map($items, ($item, $i) => return (
+    <Card key={$item->id}>
+        <p>@{ $item->name }: @{ $item->price }</p>
+    </Card>
+))
+```
+- **HTML tags:** `key={$val}` is compiled directly to `data-el-key="{$val}"`.
+- **Components:** `key` is received as a prop and attached as `data-el-key` to the root HTML node.
+- **Fallback:** If omitted, the engine falls back to `$i` (index) and the compiler/editor issues a diagnostic warning.
+
+## Reactive Scripts & Event Handling
+
+Components can define client-side interactivity directly using `@script(...)` or `@js(...)`. UI components do not need their own JavaScript files, but can pass their reactive logic directly into the view:
+
+```php
+<div class="product-item" data-id={$id} data-price={$price}>
+    <h3>@{ $title }</h3>
+    <button class="add-to-cart">Add to Cart</button>
+</div>
+
+@script(
+    handleEvent('click', '.product-item .add-to-cart', (e, el) => {
+        const item = el.closest('.product-item');
+        alert('Added item #' + item.dataset.id + ' at $' + item.dataset.price);
+    });
+)
+```
+
+### Delegation via `handleEvent` & `Cast.on`
+
+The global helper `handleEvent(event, selector, handler)` attaches delegated listeners directly to `document`:
+- **Dynamic Elements:** Even when elements are added or replaced via AJAX/DOM mutations, the event handler continues to work without re-attaching listeners.
+- **Handler Signature:** `(event, matchedElement) => { ... }` where `matchedElement` is the DOM node matching `selector`.
+- **Runtime methods:**
+  - `Cast.on(event, selector, handler)` — delegated event listener
+  - `Cast.update(target, content)` — updates element/select options in-place
+  - `Cast.refresh(target, url)` — fetches HTML fragment and replaces target container
+  - `Cast.onLoad(callback)` — executes on DOMContentLoaded
+
+### Emitting Scripts with `@scripts`
+
+Place `@scripts` right before the closing `</body>` tag of your layout. It deduplicates and renders all scripts registered by components rendered during the request along with the zero-dependency `assets/cast.js` runtime.
+
+> **Rule:** Never use PHP `@{ }` holes directly inside `@script(...)`. Pass server data via HTML attributes (`data-*`) and access them in JavaScript with `el.dataset`.
+
+## Scoped CSS & Dynamic Variables
+
+Components can encapsulate styles with `@css(...)`. The engine automatically scopes selectors to a deterministic component class (`.cast-<id>`) and transforms dynamic PHP expressions into CSS custom properties:
+
+```php
+<div class="user-badge" data-role={$role}>
+    <span>@{ $name }</span>
+</div>
+
+@css(
+    .user-badge {
+        padding: 8px 12px;
+        border-radius: 4px;
+        border: 2px solid @{ $role === 'admin' ? '#0070f3' : '#e0e0e0' };
+        background-color: @{ $isActive ? '#f0fdf4' : '#fff' };
+    }
+    .user-badge span {
+        font-weight: 600;
+    }
+)
+```
+
+### Dynamic CSS Variables
+Any `@{ ... }` expression inside `@css(...)` is converted into a CSS variable (`var(--cast-<id>-<n>)`). The computed PHP values are injected as an inline `style="..."` attribute onto the component container, leaving the stylesheet clean and static.
+
+### Emitting Styles with `@styles`
+
+Place `@styles` in the `<head>` of your layout to output all collected component stylesheets for the current request.
+
+## Component Assets & Bundler
+
+In addition to inline `@script` and `@css`, components can have dedicated asset files:
+- `resources/css/components/<component-name>.css`
+- `resources/js/components/<component-name>.js`
+
+The engine automatically discovers and registers matching asset files whenever a component is rendered.
+
+### Production Bundling (`engine:build`)
+
+In development, assets can be loaded per-component. In production, run the engine bundler to minify and bundle all component assets into your application bundles:
+
+```bash
+php cast engine:build
+# or with custom paths:
+php cast engine:build --css=public/css/app.css --js=public/js/app.js --components=resources
+```
+
+The bundler:
+1. Discovers all CSS and JS files in `resources/css/components/` and `resources/js/components/`.
+2. Strips comments and minifies whitespace (dependency-free).
+3. Injects or replaces the bundled code between safe marker comments in `app.css` and `app.js`:
+   ```css
+   /* cast:components:start */
+   ...minified component styles...
+   /* cast:components:end */
+   ```
+
+## Terminal Commands & CLI
+
+CastTemplateEngine includes a zero-dependency CLI runner:
+
+```bash
+php cast engine:check              # Scan and lint all .cast.php files for syntax errors & missing keys
+php cast engine:compile            # Precompile all templates into the cache folder
+php cast engine:build              # Minify & bundle component assets into app.css and app.js
+php cast engine:clear              # Clear compiled template cache
+php cast engine:snippets           # Display full code snippets cheat sheet
+php cast engine:editor install     # Install or update VS Code extension
+```
+
+Commands can also be called with space syntax (`php cast engine check`) and can be extended by CastFramework via `CastTemplateEngine\Console\CommandRegistry::register(...)`.
+
+## Documentation Snippets List
+
+The following snippet triggers are available in the editor:
+
+| Prefix | Description | Expansion |
+|---|---|---|
+| `ccomp` | Component with children | `<Card title="Header">$0</Card>` |
+| `ccomp1` | Self-closing component | `<Btns.Soft label="Save" />` |
+| `cslot` | Named Slot | `<Slot name="left">$0</Slot>` |
+| `cprop` | Expression Prop | `total={$value}` |
+| `aecho` | Print Expression | `@{ $variable }` |
+| `amap` | Collection Map with Key | `@map($items, ($item, $i) => return(<Card key={$i}>...</Card>))` |
+| `amapobj` | Object Map Shorthand | `@$items.map(($item, $i) => return(<Card key={$i}>...</Card>))` |
+| `afilter` | Filter Collection | `@filter($items, ($item) => $item->quantity > 0)` |
+| `achain` | Chained Filter and Map | `@$items.filter(($item) => condition).map(($item, $i) => return(...))` |
+| `acast` | Conditional Inline Render | `@{ $cond ? @cast(<p>Yes</p>) : @cast(<p>No</p>) }` |
+| `ascript` | Component Client Script | `@script(handleEvent('click', '.btn', (e, el) => { ... }))` |
+| `ajs` | Component Script Alias | `@js(handleEvent('click', '.btn', (e, el) => { ... }))` |
+| `acss` | Scoped Component Styles | `@css(li.active { color: @{ $color }; })` |
+| `ascripts` | Render Component Scripts | `@scripts` |
+| `astyles` | Render Component Styles | `@styles` |
+| `aevent` | Delegated Event Listener | `handleEvent('click', '.selector', (e, el) => { ... })` |
+| `aforeach` | Foreach Loop | `@foreach ($items as $item) ... @endforeach` |
+| `aforelse` | Forelse with Empty | `@forelse ($items as $item) ... @empty ... @endforelse` |
+| `aif` | If Condition | `@if ($condition) ... @endif` |
+| `aifelse` | If / Else Condition | `@if ($cond) ... @else ... @endif` |
+| `aswitch` | Switch Case Block | `@switch ($val) @case (1) ... @break @default ... @endswitch` |
+| `aphp` | PHP Statement / Block | `@php($n = 1)` or `@php ... @endphp` |
+
 
 ## Coming from `useComponent()`
 

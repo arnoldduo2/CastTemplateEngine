@@ -2,6 +2,17 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 1.5.0
+
+Stable release for CastTemplateEngine.
+
+- **Reactive Client Scripts**: `@script(...)` and `@js(...)` allow components to define client-side behavior without separate JS files. Includes zero-dependency `assets/cast.js` runtime with delegated event listener `handleEvent(event, selector, handler)` and `Cast.on(...)`, `Cast.update(...)` for in-place DOM updates, `Cast.refresh(...)` for fragment swaps, and `@scripts` layout directive.
+- **Scoped Component Styles**: `@css(...)` encapsulates styles per component with automatic selector scoping and translates PHP `@{ ... }` expressions into dynamic CSS custom properties (`var(--cast-<id>-<n>)`). Rendered via `@styles`.
+- **Component Asset Bundler**: Auto-discovery of dedicated component stylesheets and scripts in `resources/css/components/` and `resources/js/components/`. Zero-dependency minification and marker-based bundling via `php cast engine:build`.
+- **Collection Shorthands**: Added `@map(...)`, `@filter(...)`, chained collection mapping (`@$items.filter(...).map(...)`), and automatic `data-el-key` attributes with diagnostic warnings.
+- **CLI Commands Suite**: Built-in CLI runner `php cast engine:<command>` for template linting (`check`), precompilation (`compile`), asset bundling (`build`), cache clearing (`clear`), snippets cheat sheet (`snippets`), and VS Code extension installation (`editor install`).
+- **VS Code Extension & Snippets**: Updated grammar, syntax highlighting, hover documentation, and comprehensive snippet triggers.
+
 ## 1.1.0
 
 - **The `@` shorthand for PHP**: `@{ $x }` for `<?= $x ?>`, and `@for`, `@foreach`, `@forelse` / `@empty`, `@while`, `@if` / `@elseif` / `@else`, `@unless`, `@isset`, `@switch` / `@case` / `@default`, `@break`, `@continue`, `@php` ... `@endphp`, each with its `@end...`. `@@` is a literal `@`. See the README. Plain PHP and everything written before keeps working; `<?php ?>` blocks, `<style>` rules like `@media`, and e-mail addresses are left alone. Line numbers are kept. Mistakes are reported with the template and line.
