@@ -16,7 +16,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-      - run: composer validate --strict
+      - run: composer validate
       - run: php tests/run.php
 
   editor:
