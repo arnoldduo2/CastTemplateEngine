@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.1
+
+- **Native CSS inside `@css(...)`**: Full syntax highlighting for CSS selectors, properties, values, units, and colors, with support for nested parentheses (`calc()`, `rgba()`) and `@{ ... }` dynamic PHP variables.
+- **Native JavaScript inside `@script(...)` and `@js(...)`**: Full syntax highlighting for JS functions, variables, and event listeners.
+- **HTML inside Expression Callbacks**: Template markup (`<tag ...>`, `</tag>`) inside `@map(...)` and other expressions is now highlighted as native HTML elements instead of PHP comparison operators.
+- **Snippets in HTML context**: Cast snippets now trigger in both HTML and PHP contexts across `.cast.php` views.
+
 ## 0.3.0
 
 - **Highlighting for the engine's `@` syntax**: `@{ $x }` (also inside attribute values and component string props), `@foreach ($users as $user):`, `@forelse` / `@empty` / `@endforelse`, `@if` / `@elseif` / `@else` / `@endif`, `@for`, `@while`, `@unless`, `@isset`, `@switch` / `@case` / `@default`, `@break`, `@continue`, `@php` ... `@endphp`, `@@`. The PHP in the parentheses is coloured as PHP; e-mail addresses, CSS `@media` and `<?php ?>` blocks are not touched.

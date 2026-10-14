@@ -2,7 +2,7 @@
   "name": "cast-framework",
   "displayName": "CastFramework",
   "description": "Highlighting, navigation and prop-aware completion for CastFramework views (.cast.php): component tags, docblock props and types, Ctrl+click to open a component's file.",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "publisher": "anode",
   "license": "MIT",
   "repository": {
@@ -52,6 +52,10 @@
     "snippets": [
       {
         "language": "php",
+        "path": "./snippets/cast.code-snippets"
+      },
+      {
+        "language": "html",
         "path": "./snippets/cast.code-snippets"
       },
       {

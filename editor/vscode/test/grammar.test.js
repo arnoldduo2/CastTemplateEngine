@@ -121,3 +121,47 @@ test("a directive next to a component and PHP in the same view", { skip }, async
   assert.ok(has(find(t, "Button"), "entity.name.tag.component.cast"));
   assert.equal(find(t, "Card").length, 2);
 });
+
+test("@css highlights as CSS and supports @{ } holes", { skip }, async () => {
+  const t = await tokenize(`@css(
+.list-group {
+  width: 100%;
+}
+li.active {
+  border-color: @{ props['role'] === 'admin' ? '#fff' : '#666' };
+}
+)`);
+  assert.ok(has(find(t, "css"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "list-group"), "entity.other.attribute-name.class.css"));
+  assert.ok(has(find(t, "width"), "support.type.property-name.css"));
+  assert.ok(has(find(t, "border-color"), "support.type.property-name.css"));
+  assert.ok(has(find(t, "role"), "meta.directive.echo.cast"));
+  assert.ok(has(find(t, "role"), "meta.embedded.expression.cast"));
+});
+
+test("@script and @js highlight as JavaScript", { skip }, async () => {
+  const t = await tokenize(`@js(
+handleEvent('click', '.btn', (e, el) => {
+  const id = el.dataset.id;
+});
+)`);
+  assert.ok(has(find(t, "js"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "click"), "string.quoted.single.js"));
+  assert.ok(has(find(t, "const"), "storage.type.js"));
+});
+
+test("@map and expressions support HTML tags and @{ } echo inside callbacks", { skip }, async () => {
+  const t = await tokenize(`@map($items, ($item, $i) => (
+  <li class="list-group-item">
+    <tr>
+      <td>@{ $item['id'] }</td>
+    </tr>
+  </li>
+))`);
+  assert.ok(has(find(t, "map"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "li"), "entity.name.tag.html"));
+  assert.ok(has(find(t, "tr"), "entity.name.tag.html"));
+  assert.ok(has(find(t, "td"), "entity.name.tag.html"));
+  assert.ok(has(find(t, "class"), "entity.other.attribute-name.cast"));
+  assert.ok(has(find(t, "item"), "meta.directive.echo.cast"));
+});

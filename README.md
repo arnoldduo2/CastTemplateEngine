@@ -465,8 +465,9 @@ php cast engine:check              # Scan and lint all .cast.php files for synta
 php cast engine:compile            # Precompile all templates into the cache folder
 php cast engine:build              # Minify & bundle component assets into app.css and app.js
 php cast engine:clear              # Clear compiled template cache
-php cast engine:snippets           # Display full code snippets cheat sheet
-php cast engine:editor install     # Install or update VS Code extension
+php cast engine:editor install     # Install or update extension for all detected editors (VS Code, Antigravity IDE, Cursor, etc.)
+php cast engine:editor --editor=antigravity-ide # Install specifically for Antigravity IDE
+php cast engine:editor --editor=code            # Install specifically for VS Code
 ```
 
 Commands can also be called with space syntax (`php cast engine check`) and can be extended by CastFramework via `CastTemplateEngine\Console\CommandRegistry::register(...)`.

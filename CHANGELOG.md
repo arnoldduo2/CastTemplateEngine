@@ -2,6 +2,19 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 1.5.1
+
+- **Editor Native Highlighting for Directives**:
+  - `@css(...)`: Embedded `source.css` for native CSS language intelligence, selector highlighting, properties, units, and color previews, while continuing to support dynamic `@{ ... }` PHP variable holes and nested CSS parentheses (`calc(...)`, `rgba(...)`, etc.).
+  - `@script(...)` & `@js(...)`: Embedded `source.js` for native JavaScript language intelligence.
+  - Expressions & `@map(...)` Callbacks: Added HTML tag (`<tag ...>`, `</tag>`) and `@{ ... }` echo recognition inside callback expressions so template markup displays full HTML syntax highlighting instead of PHP comparison (`<`, `>`) and arithmetic operators.
+- **Editor Snippets Everywhere**:
+  - Registered snippets for both `php` and `html` language modes in `package.json`.
+  - Updated snippet scopes to `php,html` so snippets like `acss`, `amap`, `aforeach`, `ccomp`, etc. autocomplete anywhere in `.cast.php` view files.
+- **Antigravity IDE & Multi-Editor Support**:
+  - Enhanced `php cast engine:editor` CLI command with `--editor` support (`--editor=antigravity-ide`, `--editor=code`, etc.).
+  - Added auto-detection to install extensions directly to Antigravity IDE (`.antigravity-ide/extensions`), VS Code (`.vscode/extensions`), and other supported editors.
+
 ## 1.5.0
 
 Stable release for CastTemplateEngine.

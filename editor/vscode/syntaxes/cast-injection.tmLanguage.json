@@ -11,6 +11,12 @@
       "include": "#directive-echo"
     },
     {
+      "include": "#directive-css"
+    },
+    {
+      "include": "#directive-js"
+    },
+    {
       "include": "#directive"
     },
     {
@@ -220,7 +226,22 @@
     "php-expression": {
       "patterns": [
         {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#component-close"
+        },
+        {
           "include": "#component-open"
+        },
+        {
+          "include": "#html-tag-close"
+        },
+        {
+          "include": "#html-tag-open"
         },
         {
           "begin": "\\{",
@@ -233,6 +254,53 @@
         },
         {
           "include": "source.php"
+        }
+      ]
+    },
+    "html-tag-close": {
+      "match": "(</)([a-z][a-z0-9:-]*)(\\s*)(>)",
+      "name": "meta.tag.structure.html",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.tag.begin.html"
+        },
+        "2": {
+          "name": "entity.name.tag.html"
+        },
+        "4": {
+          "name": "punctuation.definition.tag.end.html"
+        }
+      }
+    },
+    "html-tag-open": {
+      "begin": "(<)([a-z][a-z0-9:-]*)(?=[\\s/>])",
+      "end": "(/?>)",
+      "name": "meta.tag.structure.html",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.begin.html"
+        },
+        "2": {
+          "name": "entity.name.tag.html"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.end.html"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#attribute-string"
+        },
+        {
+          "include": "#spread-attribute"
+        },
+        {
+          "include": "#brace-attribute"
+        },
+        {
+          "include": "#attribute-name"
         }
       ]
     },
@@ -264,8 +332,114 @@
         }
       ]
     },
+    "directive-css": {
+      "begin": "(?<![\\w.@])(@)(css)\\b\\s*(\\()",
+      "end": "\\)",
+      "name": "meta.directive.css.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+        },
+        "2": {
+          "name": "keyword.control.directive.cast"
+        },
+        "3": {
+          "name": "punctuation.section.embedded.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#css-paren-group"
+        },
+        {
+          "include": "source.css"
+        }
+      ]
+    },
+    "css-paren-group": {
+      "begin": "\\(",
+      "end": "\\)",
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#css-paren-group"
+        },
+        {
+          "include": "source.css"
+        }
+      ]
+    },
+    "directive-js": {
+      "begin": "(?<![\\w.@])(@)(script|js)\\b\\s*(\\()",
+      "end": "\\)",
+      "name": "meta.directive.js.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+        },
+        "2": {
+          "name": "keyword.control.directive.cast"
+        },
+        "3": {
+          "name": "punctuation.section.embedded.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#js-paren-group"
+        },
+        {
+          "include": "source.js"
+        }
+      ]
+    },
+    "js-paren-group": {
+      "begin": "\\(",
+      "end": "\\)",
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#js-paren-group"
+        },
+        {
+          "include": "source.js"
+        }
+      ]
+    },
     "directive": {
-      "begin": "(?<![\\w.@])(@)(for|foreach|forelse|while|if|elseif|unless|isset|switch|case|php|break|continue|else|empty|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|default|map|filter|script|js|css|scripts|styles)\\b",
+      "begin": "(?<![\\w.@])(@)(for|foreach|forelse|while|if|elseif|unless|isset|switch|case|php|break|continue|else|empty|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|default|map|filter|scripts|styles)\\b",
       "end": "(?<=\\))(?:[ \\t]*(:))?|(?![ \\t(])",
       "name": "meta.directive.cast",
       "beginCaptures": {

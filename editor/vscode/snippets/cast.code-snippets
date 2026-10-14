@@ -1,7 +1,7 @@
 {
   "Cast component": {
     "prefix": "ccomp",
-    "scope": "php",
+    "scope": "php,html",
     "body": [
       "<${1:Card} ${2:title=\"$3\"}>",
       "\t$0",
@@ -11,13 +11,13 @@
   },
   "Cast self-closing component": {
     "prefix": "ccomp1",
-    "scope": "php",
+    "scope": "php,html",
     "body": "<${1:Btns.Button} ${2:label=\"$3\"} />",
     "description": "A self-closing component"
   },
   "Cast slot": {
     "prefix": "cslot",
-    "scope": "php",
+    "scope": "php,html",
     "body": [
       "<Slot name=\"${1:left}\">",
       "\t$0",
@@ -27,13 +27,13 @@
   },
   "Cast prop expression": {
     "prefix": "cprop",
-    "scope": "php",
+    "scope": "php,html",
     "body": "${1:total}={${2:\\$value}}",
     "description": "A prop whose value is a PHP expression"
   },
   "Cast foreach": {
     "prefix": "cfor",
-    "scope": "php",
+    "scope": "php,html",
     "body": [
       "<?php foreach (${1:\\$items} as ${2:\\$item}) : ?>",
       "\t$0",
@@ -43,7 +43,7 @@
   },
   "Cast if": {
     "prefix": "cif",
-    "scope": "php",
+    "scope": "php,html",
     "body": [
       "<?php if (${1:\\$condition}) : ?>",
       "\t$0",
@@ -53,7 +53,7 @@
   },
   "Cast page shell": {
     "prefix": "cpage",
-    "scope": "php",
+    "scope": "php,html",
     "body": [
       "<?php",
       "__includes('layouts.header', \\$data);",
@@ -64,13 +64,13 @@
   },
   "Cast include": {
     "prefix": "cinc",
-    "scope": "php",
+    "scope": "php,html",
     "body": "<?php __includes('${1:layouts.header}', \\$data); ?>",
     "description": "Include a partial or layout"
   },
   "Cast modules": {
     "prefix": "cmod",
-    "scope": "php",
+    "scope": "php,html",
     "body": "<?= __modules(\"\\$parentName.\\$pageName\", '${1|css,js|}') ?>",
     "description": "Link the page's css or js module"
   },
