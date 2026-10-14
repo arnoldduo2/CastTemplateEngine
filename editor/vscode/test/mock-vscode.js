@@ -39,8 +39,8 @@ class DocumentLink {
   }
 }
 class MarkdownString {
-  constructor() {
-    this.value = "";
+  constructor(value = "") {
+    this.value = value;
   }
   appendMarkdown(s) {
     this.value += s;
@@ -164,7 +164,31 @@ function document(file, text) {
     while (line + 1 < starts.length && starts[line + 1] <= o) line++;
     return new Position(line, o - starts[line]);
   };
-  return { uri: Uri.file(file), getText: () => text, positionAt, offsetAt: (p) => starts[p.line] + p.character };
+  const offsetAt = (p) => starts[p.line] + p.character;
+  const getWordRangeAtPosition = (position, regex = /[A-Za-z0-9_$]+/) => {
+    const line = lines[position.line] || "";
+    const re = new RegExp(regex.source, regex.flags.includes("g") ? regex.flags : regex.flags + "g");
+    let m;
+    while ((m = re.exec(line))) {
+      const start = m.index;
+      const end = start + m[0].length;
+      if (m[0].length === 0) {
+        re.lastIndex++;
+        continue;
+      }
+      if (position.character >= start && position.character <= end) {
+        return new Range(new Position(position.line, start), new Position(position.line, end));
+      }
+    }
+    return undefined;
+  };
+  return {
+    uri: Uri.file(file),
+    getText: (range) => (range ? text.slice(offsetAt(range.start), offsetAt(range.end)) : text),
+    positionAt,
+    offsetAt,
+    getWordRangeAtPosition,
+  };
 }
 
 module.exports = { create, document, Position, Range, path };

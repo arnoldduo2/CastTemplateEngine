@@ -1,0 +1,41 @@
+{
+  "description": "Avatar component with a complex prop type and a required callback.",
+  "props": [
+    {
+      "name": "user",
+      "type": "array<string, mixed>",
+      "description": "The user record (name, avatarUrl)",
+      "required": true,
+      "default": null,
+      "values": [],
+      "kind": "other",
+      "deprecated": false,
+      "inferred": false
+    },
+    {
+      "name": "onClick",
+      "type": "callable(array): string",
+      "description": "Called with the user record when clicked",
+      "required": true,
+      "default": null,
+      "values": [],
+      "kind": "other",
+      "deprecated": false,
+      "inferred": false
+    },
+    {
+      "name": "size",
+      "type": "int|float",
+      "description": "Pixel size of the avatar",
+      "required": false,
+      "default": "40",
+      "values": [],
+      "kind": "number",
+      "deprecated": false,
+      "inferred": false
+    }
+  ],
+  "slots": [],
+  "examples": [],
+  "deprecated": false
+}

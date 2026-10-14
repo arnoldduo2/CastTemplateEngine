@@ -1,0 +1,46 @@
+{
+  "description": "Alert banner for flash messages.",
+  "props": [
+    {
+      "name": "message",
+      "type": "string",
+      "description": "The alert message",
+      "required": false,
+      "default": "''",
+      "values": [],
+      "kind": "string",
+      "deprecated": false,
+      "inferred": false
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "description": "Alert type, e.g. \"info\", \"success\", \"warning\", \"danger\"",
+      "required": false,
+      "default": "'info'",
+      "values": [
+        "info",
+        "success",
+        "warning",
+        "danger"
+      ],
+      "kind": "string",
+      "deprecated": false,
+      "inferred": false
+    },
+    {
+      "name": "level",
+      "type": "string",
+      "description": "Old alert level. @deprecated use type instead",
+      "required": true,
+      "default": null,
+      "values": [],
+      "kind": "string",
+      "deprecated": "use type instead",
+      "inferred": false
+    }
+  ],
+  "slots": [],
+  "examples": [],
+  "deprecated": false
+}

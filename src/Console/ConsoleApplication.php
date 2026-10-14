@@ -68,7 +68,7 @@ final class ConsoleApplication
 
     private static function printHelp(): void
     {
-        echo "\nCastTemplateEngine CLI Tool (v1.0.2)\n";
+        echo "\nCastTemplateEngine CLI Tool (v" . \CastTemplateEngine\CastTemplate::VERSION . ")\n";
         echo "Usage: php cast <command> [options]\n";
         echo "       php cast engine <command> [options]\n\n";
         echo "Available Commands:\n";

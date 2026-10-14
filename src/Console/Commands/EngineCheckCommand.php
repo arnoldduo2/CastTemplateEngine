@@ -22,6 +22,7 @@ final class EngineCheckCommand implements CommandInterface
     public function execute(array $args): int
     {
         $targetDir = $args[0] ?? getcwd();
+        $componentsDir = $this->resolveComponentsDir($targetDir);
         echo "\n[Cast Engine] Scanning for .cast.php template files in {$targetDir}...\n\n";
 
         $files = $this->findFiles($targetDir);
@@ -35,7 +36,7 @@ final class EngineCheckCommand implements CommandInterface
 
         foreach ($files as $file) {
             $source = (string) @file_get_contents($file);
-            $problems = Compiler::lint($source, $file);
+            $problems = Compiler::lint($source, $file, $componentsDir);
 
             if (empty($problems)) {
                 echo "  \033[32m✔\033[0m {$file}\n";
@@ -58,6 +59,27 @@ final class EngineCheckCommand implements CommandInterface
         echo "\n[Cast Engine] Checked " . count($files) . " file(s): {$totalErrors} error(s), {$totalWarnings} warning(s).\n";
 
         return $totalErrors > 0 ? 1 : 0;
+    }
+
+    /**
+     * Finds the project's component root so <Tag /> references can be resolved while linting,
+     * following the same `{views}/components` convention as `engine:compile`.
+     */
+    private function resolveComponentsDir(string $targetDir): string
+    {
+        $candidates = [
+            $targetDir . '/components',
+            $targetDir . '/resources/views/components',
+            $targetDir . '/views/components',
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_dir($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $targetDir;
     }
 
     /**

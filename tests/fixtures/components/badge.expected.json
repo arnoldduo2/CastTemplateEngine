@@ -1,0 +1,41 @@
+{
+  "description": "Badge component: a small pill, optionally a dot indicator or a numeric count.",
+  "props": [
+    {
+      "name": "text",
+      "type": "string",
+      "description": "Badge text",
+      "required": false,
+      "default": "''",
+      "values": [],
+      "kind": "string",
+      "deprecated": false,
+      "inferred": false
+    },
+    {
+      "name": "dot",
+      "type": "bool",
+      "description": "Show a leading dot instead of text",
+      "required": false,
+      "default": "false",
+      "values": [],
+      "kind": "bool",
+      "deprecated": false,
+      "inferred": false
+    },
+    {
+      "name": "count",
+      "type": "int",
+      "description": "Number to display instead of text",
+      "required": false,
+      "default": "0",
+      "values": [],
+      "kind": "number",
+      "deprecated": false,
+      "inferred": false
+    }
+  ],
+  "slots": [],
+  "examples": [],
+  "deprecated": false
+}

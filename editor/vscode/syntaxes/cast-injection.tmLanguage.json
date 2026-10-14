@@ -334,7 +334,7 @@
     },
     "directive-css": {
       "begin": "(?<![\\w.@])(@)(css)\\b\\s*(\\()",
-      "end": "\\)",
+      "end": "(\\))",
       "name": "meta.directive.css.cast",
       "beginCaptures": {
         "1": {
@@ -344,12 +344,12 @@
           "name": "keyword.control.directive.cast"
         },
         "3": {
-          "name": "punctuation.section.embedded.begin.cast"
+          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast"
         }
       },
       "endCaptures": {
-        "0": {
-          "name": "punctuation.section.embedded.end.cast"
+        "1": {
+          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast"
         }
       },
       "patterns": [
@@ -387,7 +387,7 @@
     },
     "directive-js": {
       "begin": "(?<![\\w.@])(@)(script|js)\\b\\s*(\\()",
-      "end": "\\)",
+      "end": "(\\))",
       "name": "meta.directive.js.cast",
       "beginCaptures": {
         "1": {
@@ -397,12 +397,12 @@
           "name": "keyword.control.directive.cast"
         },
         "3": {
-          "name": "punctuation.section.embedded.begin.cast"
+          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast"
         }
       },
       "endCaptures": {
-        "0": {
-          "name": "punctuation.section.embedded.end.cast"
+        "1": {
+          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast"
         }
       },
       "patterns": [
@@ -467,12 +467,12 @@
       "name": "meta.directive.arguments.cast",
       "beginCaptures": {
         "0": {
-          "name": "punctuation.section.embedded.begin.cast"
+          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast"
         }
       },
       "endCaptures": {
         "0": {
-          "name": "punctuation.section.embedded.end.cast"
+          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast"
         }
       },
       "contentName": "meta.embedded.expression.cast",

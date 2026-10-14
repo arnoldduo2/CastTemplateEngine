@@ -46,11 +46,7 @@ final class EngineEditorCommand implements CommandInterface
             }
         }
 
-        $editorDir = __DIR__ . '/../../../../editor/vscode';
-        if (!is_dir($editorDir)) {
-            $editorDir = __DIR__ . '/../../../editor/vscode';
-        }
-        $editorDir = realpath($editorDir);
+        $editorDir = realpath(__DIR__ . '/../../../editor/vscode');
 
         if (!$editorDir || !is_file($editorDir . '/package.json')) {
             echo "[Cast Engine] Could not locate editor/vscode package.\n";
@@ -65,7 +61,7 @@ final class EngineEditorCommand implements CommandInterface
 
         echo "\n[Cast Engine] Editor extension: {$name} v{$version}\n";
 
-        $home = getenv('USERPROFILE') ?: getenv('HOME') ?: '';
+        $home = getenv('CAST_HOME') ?: getenv('USERPROFILE') ?: getenv('HOME') ?: '';
         if ($home === '') {
             echo "[Cast Engine] Could not determine user home directory.\n";
             return 1;
@@ -75,6 +71,25 @@ final class EngineEditorCommand implements CommandInterface
         if (empty($targets)) {
             echo "[Cast Engine] No supported editor extensions directory found.\n";
             return 1;
+        }
+
+        if ($action === 'uninstall') {
+            foreach ($targets as $editorName => $targetDir) {
+                if (!is_dir($targetDir)) {
+                    echo "  \033[33m-\033[0m Not installed for {$editorName}, skipping.\n";
+                    continue;
+                }
+                echo "[Cast Engine] Removing from {$editorName} ({$targetDir})...\n";
+                $this->removeDirectory($targetDir);
+                echo "  \033[32m✔\033[0m Uninstalled successfully from {$editorName}.\n";
+            }
+
+            echo "\n========================================================================\n";
+            echo "  \033[32mSUCCESS:\033[0m Cast Editor Extension v{$version} has been uninstalled!\n";
+            echo "========================================================================\n";
+            echo "  Please reload or restart your editor window to complete removal.\n\n";
+
+            return 0;
         }
 
         foreach ($targets as $editorName => $targetDir) {
@@ -136,6 +151,27 @@ final class EngineEditorCommand implements CommandInterface
         }
 
         return $detected;
+    }
+
+    private function removeDirectory(string $dir): void
+    {
+        $handle = opendir($dir);
+        if (!$handle) return;
+
+        while (false !== ($file = readdir($handle))) {
+            if ($file === '.' || $file === '..') {
+                continue;
+            }
+            $path = $dir . DIRECTORY_SEPARATOR . $file;
+            if (is_dir($path)) {
+                $this->removeDirectory($path);
+            } else {
+                @unlink($path);
+            }
+        }
+
+        closedir($handle);
+        @rmdir($dir);
     }
 
     private function copyDirectory(string $src, string $dst): void

@@ -6,7 +6,7 @@
 const vscode = require("vscode");
 const fs = require("node:fs");
 const path = require("node:path");
-const { scanComponents, scanHelpers } = require("./lib/scan");
+const { scanComponents, scanHelpers, scanChainCalls } = require("./lib/scan");
 const { resolveComponent, resolveLegacyComponent, resolveView, resolveModule, propsOf } = require("./lib/resolve");
 const { lookup, listComponents, findProp, specOf } = require("./lib/components");
 const { contextAt, diagnose } = require("./lib/complete");
@@ -103,11 +103,27 @@ class Hovers {
         "@js": "**@js( ... )**\n\nAlias for `@script(...)`. Component script block wrapped in an IIFE.",
         "@css": "**@css( ... )**\n\nComponent stylesheet block. Scoped to the component and supports dynamic `@{ expr }` CSS variables.\n\n```css\n@css(\n  li.active { border-color: @{ props['role'] === 'admin' ? '#fff' : '#666' }; }\n)\n```",
         "@scripts": "**@scripts**\n\nOutputs all collected component scripts and the `cast.js` runtime before `</body>`.",
-        "@styles": "**@styles**\n\nOutputs all collected component stylesheets."
+        "@styles": "**@styles**\n\nOutputs all collected component stylesheets.",
+        "@map": "**@map($collection, fn($item, $i) => ...)**\n\nRenders markup for every item of `$collection` and echoes the result. Backed by `Collection::map()`.\n\n- `$collection`: an array, `stdClass` or `Traversable`\n- callback: `fn($item, $index, $key) => string`\n\n```\n@map($items, ($item, $i) => return(<Card key={$i}>@{ $item->name }</Card>))\n```",
+        "@filter": "**@filter($collection, fn($item) => bool[, fn($item, $i) => ...])**\n\nTwo forms, backed by `Collection::filter()`:\n\n- **Render form** (3 args): filters `$collection`, then renders and echoes each remaining item with the 3rd callback.\n- **Standalone form** (2 args): reassigns `$collection` in place to the filtered array/object — nothing is echoed.\n\n```\n@filter($items, ($item) => $item->qty > 0)\n```",
+        "return": "**return(...)** *(inside an expression)*\n\nCompiles the markup inside the parentheses and returns it as a string, so a chunk of HTML/components can be produced from inside a callback or `@{ }` expression (e.g. a `@map`/`@filter` callback). Implemented as an immediately-invoked closure that buffers output with `ob_start()`/`ob_get_clean()` and captures the surrounding scope's variables.",
+        "@cast": "**@cast(...)**\n\nAlias for `return(...)` inside an expression: compiles the markup inside the parentheses and returns it as a string from the current callback/expression.",
       };
       if (builtins[word]) {
         return new vscode.Hover(new vscode.MarkdownString(builtins[word]), wordRange);
       }
+      if (word === "@" && document.getText().charAt(document.offsetAt(wordRange.end)) === "{") {
+        return new vscode.Hover(new vscode.MarkdownString("**@{ ... }**\n\nAn echo hole: compiles the PHP expression inside and prints its value (like `<?= ... ?>`). Can itself contain `return(...)`/`@cast(...)` to print a rendered chunk of markup."), wordRange);
+      }
+    }
+
+    const chain = scanChainCalls(document.getText()).find((c) => new vscode.Range(document.positionAt(c.start), document.positionAt(c.end)).contains(position));
+    if (chain) {
+      const range = new vscode.Range(document.positionAt(chain.start), document.positionAt(chain.end));
+      const md = chain.method === "map"
+        ? "**.map(fn($item, $i) => ...)** *(fluent chain)*\n\nPart of `@$var.filter(...).map(...)`. Maps the chain's current collection; the chain's **final** `.map()` is what gets echoed. Single-argument callback: `fn($item, $index) => string`.\n\nBacked by `Collection::map()`."
+        : "**.filter(fn($item) => bool)** *(fluent chain)*\n\nPart of `@$var.filter(...).map(...)`. Narrows the chain's current collection to items where the callback returns true, then passes the result on to the next `.filter()`/`.map()`. Single-argument callback: `fn($item) => bool`.\n\nBacked by `Collection::filter()`.";
+      return new vscode.Hover(new vscode.MarkdownString(md), range);
     }
 
     const hit = references(document).find((r) => r.range.contains(position));

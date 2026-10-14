@@ -1,0 +1,31 @@
+{
+  "description": "Card component with a header slot and a body slot.",
+  "props": [
+    {
+      "name": "title",
+      "type": "string",
+      "description": "Card title, shown above the header slot",
+      "required": false,
+      "default": "''",
+      "values": [],
+      "kind": "string",
+      "deprecated": false,
+      "inferred": false
+    }
+  ],
+  "slots": [
+    {
+      "name": "header",
+      "description": "Optional header content, rendered above the title"
+    },
+    {
+      "name": "default",
+      "description": "The card body"
+    }
+  ],
+  "examples": [
+    "<Card title=\"Welcome\"><p>Body text</p></Card>",
+    "<Card title=\"Welcome\"><Slot name=\"header\"><b>Header</b></Slot><p>Body</p></Card>"
+  ],
+  "deprecated": false
+}

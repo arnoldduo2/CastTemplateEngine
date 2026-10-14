@@ -1,7 +1,7 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { scanComponents, scanHelpers } = require("../lib/scan");
+const { scanComponents, scanHelpers, scanChainCalls } = require("../lib/scan");
 
 const names = (src) => scanComponents(src).map((c) => (c.closing ? "/" : "") + c.name);
 const at = (src, ref) => src.slice(ref.start, ref.end);
@@ -86,4 +86,39 @@ test("helper calls: views, includes, legacy components and modules, with the ran
 
 test("helper scanning ignores look-alikes", () => {
   assert.deepEqual(scanHelpers(`<?php $x->preview('a.b'); myviews('a.b'); __includes($name); Component($c); ?>`), []);
+});
+
+test("fluent chain scanning: every .filter/.map segment, range covers the method name only", () => {
+  const src = "@$items.filter(($i) => $i->active).map(($i, $k) => $i->name)";
+  const found = scanChainCalls(src);
+  assert.deepEqual(
+    found.map((c) => [c.method, src.slice(c.start, c.end)]),
+    [
+      ["filter", "filter"],
+      ["map", "map"],
+    ]
+  );
+});
+
+test("fluent chain scanning: the leading $ is optional, and a single segment is enough", () => {
+  assert.deepEqual(scanChainCalls("@items.map(($i) => $i)").map((c) => c.method), ["map"]);
+  assert.deepEqual(scanChainCalls("@$list.filter(($i) => true)").map((c) => c.method), ["filter"]);
+});
+
+test("fluent chain scanning: the plain @map(...)/@filter(...) directive form is not a chain", () => {
+  assert.deepEqual(scanChainCalls("@map($items, ($i) => $i)"), []);
+  assert.deepEqual(scanChainCalls("@filter($items, ($i) => true)"), []);
+});
+
+test("fluent chain scanning never looks inside <?php ?>, <script> or <style>", () => {
+  assert.deepEqual(scanChainCalls("<?php $x = 1; @$items.filter(($i) => $i); ?>"), []);
+  assert.deepEqual(scanChainCalls("<script>// @$items.filter(x).map(y)</script>"), []);
+  assert.deepEqual(scanChainCalls("<style>/* @$items.filter(x).map(y) */</style>"), []);
+});
+
+test("fluent chain scanning: nested parentheses and strings inside a segment do not end it early", () => {
+  const src = "@$items.filter(($i) => in_array($i, ['a)', 'b'])).map(($i) => $i)";
+  const found = scanChainCalls(src);
+  assert.deepEqual(found.map((c) => c.method), ["filter", "map"]);
+  assert.equal(src.slice(found[1].start, found[1].end), "map");
 });

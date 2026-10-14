@@ -1,0 +1,52 @@
+{
+  "description": "Modal dialog, closed by default.",
+  "props": [
+    {
+      "name": "id",
+      "type": "string",
+      "description": "DOM id used to target this modal from JS",
+      "required": true,
+      "default": null,
+      "values": [],
+      "kind": "string",
+      "deprecated": false,
+      "inferred": false
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "description": "Dialog title",
+      "required": true,
+      "default": null,
+      "values": [],
+      "kind": "string",
+      "deprecated": false,
+      "inferred": false
+    },
+    {
+      "name": "size",
+      "type": "?string",
+      "description": "Dialog width: \"sm\", \"md\" (default) or \"lg\" [optional]",
+      "required": false,
+      "default": "'md'",
+      "values": [],
+      "kind": "string",
+      "deprecated": false,
+      "inferred": false
+    }
+  ],
+  "slots": [
+    {
+      "name": "default",
+      "description": "The dialog body"
+    },
+    {
+      "name": "footer",
+      "description": "Optional footer actions (e.g. buttons)"
+    }
+  ],
+  "examples": [
+    "<Modal id=\"confirm-delete\" title=\"Delete item?\"><p>This cannot be undone.</p></Modal>"
+  ],
+  "deprecated": "use the Dialog component instead"
+}

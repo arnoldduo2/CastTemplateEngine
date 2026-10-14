@@ -236,4 +236,93 @@ function scanHelpers(src) {
   return found.sort((a, b) => a.start - b.start);
 }
 
-module.exports = { scanComponents, scanHelpers, NAME };
+const CHAIN_START = /@(\$?[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(filter|map)\b/y;
+const CHAIN_NEXT = /\s*\.\s*(filter|map)\b/y;
+
+/**
+ * Finds `.filter`/`.map` segments of a fluent collection chain: `@$items.filter(...).map(...)` (the `$` is optional).
+ * Only the method name is returned as a range (not the leading dot or the parentheses), same convention as
+ * `scanComponents`' tag-name ranges. Skips `<?php ?>`, comments, `<script>` and `<style>`, same as component scanning,
+ * since the chain is only ever recognized in the template's HTML/markup region (CastTemplateEngine\Directives::handleChain).
+ *
+ * @typedef {{kind: 'chain', method: 'filter'|'map', start: number, end: number}} ChainRef
+ * @param {string} src
+ * @returns {ChainRef[]}
+ */
+function scanChainCalls(src) {
+  const found = [];
+  let pos = 0;
+
+  while (pos < src.length) {
+    const ltIdx = src.indexOf("<", pos);
+    const atIdx = src.indexOf("@", pos);
+    if (atIdx < 0) break;
+
+    if (ltIdx >= 0 && ltIdx < atIdx) {
+      if (src.startsWith("<?", ltIdx)) {
+        const end = src.indexOf("?>", ltIdx + 2);
+        pos = end < 0 ? src.length : end + 2;
+        continue;
+      }
+      if (src.startsWith("<!--", ltIdx)) {
+        const end = src.indexOf("-->", ltIdx + 4);
+        pos = end < 0 ? src.length : end + 3;
+        continue;
+      }
+      RAW_ELEMENT.lastIndex = ltIdx;
+      const raw = RAW_ELEMENT.exec(src);
+      if (raw) {
+        const close = src.toLowerCase().indexOf(`</${raw[1].toLowerCase()}`, ltIdx);
+        pos = close < 0 ? src.length : close + 2;
+        continue;
+      }
+      pos = ltIdx + 1;
+      continue;
+    }
+
+    CHAIN_START.lastIndex = atIdx;
+    const m = CHAIN_START.exec(src);
+    if (m && m.index === atIdx) {
+      const firstMethod = m[2];
+      const firstStart = atIdx + m[0].length - firstMethod.length;
+      found.push({ kind: "chain", method: firstMethod, start: firstStart, end: firstStart + firstMethod.length });
+
+      let p = skipParens(src, atIdx + m[0].length);
+      for (;;) {
+        CHAIN_NEXT.lastIndex = p;
+        const n = CHAIN_NEXT.exec(src);
+        if (!(n && n.index === p)) break;
+        const method = n[1];
+        const start = p + n[0].length - method.length;
+        found.push({ kind: "chain", method, start, end: start + method.length });
+        p = skipParens(src, p + n[0].length);
+      }
+      pos = p;
+      continue;
+    }
+    pos = atIdx + 1;
+  }
+
+  return found;
+}
+
+/** The position just after the balanced `( ... )` starting at (or after whitespace from) `pos`; `pos` itself if there is none. */
+function skipParens(src, pos) {
+  let i = pos;
+  while (i < src.length && /\s/.test(src[i])) i++;
+  if (src[i] !== "(") return pos;
+
+  let depth = 0;
+  for (; i < src.length; i++) {
+    const c = src[i];
+    if (c === '"' || c === "'") {
+      i = phpString(src, i, c) - 1;
+      continue;
+    }
+    if (c === "(") depth++;
+    else if (c === ")" && --depth === 0) return i + 1;
+  }
+  return src.length;
+}
+
+module.exports = { scanComponents, scanHelpers, scanChainCalls, NAME };

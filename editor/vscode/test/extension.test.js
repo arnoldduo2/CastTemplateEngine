@@ -102,6 +102,53 @@ test("the hover for a found component shows its file and props", () => {
   assert.match(hover.contents.value, /Props: `title`, `footer`/);
 });
 
+test("hovering @map, @filter, return(...), @cast(...) and the @{ } echo hole explains what goes inside", () => {
+  const { root, providers } = project({});
+  const hoverAt = (src, index) => providers.hover.provideHover(document(path.join(root, VIEW), src), new Position(0, index));
+
+  const map = hoverAt("@map($items, ($item, $i) => $item)", "@map".length - 2);
+  assert.match(map.contents.value, /\*\*@map\(\$collection/);
+  assert.match(map.contents.value, /Collection::map/);
+
+  const filter = hoverAt("@filter($items, ($item) => $item->qty > 0)", "@filter".length - 2);
+  assert.match(filter.contents.value, /\*\*@filter\(\$collection/);
+  assert.match(filter.contents.value, /Collection::filter/);
+
+  const retSrc = "@{ return(<p>x</p>) }";
+  const ret = hoverAt(retSrc, retSrc.indexOf("return") + 2);
+  assert.match(ret.contents.value, /\*\*return\(\.\.\.\)\*\*/);
+  assert.match(ret.contents.value, /ob_start/);
+
+  const castSrc = "@{ @cast(<p>x</p>) }";
+  const cast = hoverAt(castSrc, castSrc.indexOf("@cast") + 2);
+  assert.match(cast.contents.value, /\*\*@cast\(\.\.\.\)\*\*/);
+  assert.match(cast.contents.value, /return\(\.\.\.\)/);
+
+  const holeSrc = "<p>@{ $x }</p>";
+  const hole = hoverAt(holeSrc, holeSrc.indexOf("@{"));
+  assert.match(hole.contents.value, /\*\*@\{ \.\.\. \}\*\*/);
+  assert.match(hole.contents.value, /echo hole/);
+});
+
+test("hovering .filter/.map in a fluent @$var.filter(...).map(...) chain explains each segment", () => {
+  const { root, providers } = project({});
+  const src = "@$items.filter(($i) => $i->active).map(($i) => $i->name)";
+  const doc = document(path.join(root, VIEW), src);
+
+  const filterHover = providers.hover.provideHover(doc, new Position(0, src.indexOf("filter") + 2));
+  assert.match(filterHover.contents.value, /\*\*\.filter\(fn\(\$item\) => bool\)\*\* \*\(fluent chain\)\*/);
+  assert.equal(src.slice(doc.offsetAt(filterHover.range.start), doc.offsetAt(filterHover.range.end)), "filter");
+
+  const mapHover = providers.hover.provideHover(doc, new Position(0, src.lastIndexOf("map") + 1));
+  assert.match(mapHover.contents.value, /\*\*\.map\(fn\(\$item, \$i\) => \.\.\.\)\*\* \*\(fluent chain\)\*/);
+  assert.equal(src.slice(doc.offsetAt(mapHover.range.start), doc.offsetAt(mapHover.range.end)), "map");
+
+  // the directive form @map(...) (no variable + dot before it) must not be mistaken for a chain segment
+  const directive = "@map($items, ($i) => $i)";
+  const directiveHover = providers.hover.provideHover(document(path.join(root, VIEW), directive), new Position(0, 2));
+  assert.match(directiveHover.contents.value, /\*\*@map\(\$collection/, "the plain directive hover, not the chain one");
+});
+
 test("<Slot> is not looked up as a component", () => {
   const src = '<Card><Slot name="left">x</Slot></Card>';
   const { root, providers } = project({ [VIEW]: src, "resources/views/components/card.cast.php": "", "resources/views/components/slot.cast.php": "" });

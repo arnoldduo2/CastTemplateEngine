@@ -2,6 +2,18 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 1.6.0
+
+- **Editor hover for functional directives**: `@map(...)`, `@filter(...)`, the inline-render transform (`return(...)`/`@cast(...)`), the `@{ ... }` echo hole, and every segment of a fluent collection chain (`@$items.filter(...).map(...)`) now show hover documentation explaining accepted parameters and behavior.
+- **Directive bracket highlighting**: every directive's parentheses (`@if(...)`, `@foreach(...)`, `@map(...)`, `@css(...)`, `@script(...)`, etc.) are now colored/bolded the same as their keyword, matching how Laravel Blade styles `@if(...)`/`@foreach(...)`.
+- **`engine:editor uninstall` actually uninstalls**: previously it parsed the `uninstall` action but always (re)installed instead; it now removes the installed extension directory.
+- **`engine:check` can resolve component tags**: it previously never passed a components directory to the compiler, so every `<Tag />` reference in any project would falsely report "not found"; it now follows the same `{views}/components` convention as `engine:compile`.
+- **`CAST_HOME` environment variable**: checked before `USERPROFILE`/`HOME` when installing the editor extension, for setups that keep a separate tool home.
+- **PHP/JS docblock parity**: `src/Support/ComponentDocs.php` is a PHP port of the editor extension's component-docblock reader (`editor/vscode/lib/docblock.js`), proven identical against shared fixtures in `tests/fixtures/components/`.
+- **Starter kit**: `starter/resources/views/` — a small example app (layout, components, pages) demonstrating the engine's conventions end-to-end.
+- Fixed a stale `v1.0.2` in the CLI's `--help` banner (now reads the real version).
+- Added a CI job that runs the editor extension's own test suite.
+
 ## 1.5.1
 
 - **Editor Native Highlighting for Directives**:

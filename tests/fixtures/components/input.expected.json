@@ -1,0 +1,52 @@
+{
+  "description": "A plain text input field, with props inferred from their defaults.",
+  "props": [
+    {
+      "name": "name",
+      "type": null,
+      "description": "",
+      "required": false,
+      "default": "''",
+      "values": [],
+      "kind": "string",
+      "deprecated": false,
+      "inferred": true
+    },
+    {
+      "name": "value",
+      "type": null,
+      "description": "",
+      "required": false,
+      "default": "''",
+      "values": [],
+      "kind": "string",
+      "deprecated": false,
+      "inferred": true
+    },
+    {
+      "name": "placeholder",
+      "type": null,
+      "description": "",
+      "required": false,
+      "default": "null",
+      "values": [],
+      "kind": "other",
+      "deprecated": false,
+      "inferred": true
+    },
+    {
+      "name": "required",
+      "type": null,
+      "description": "",
+      "required": false,
+      "default": "false",
+      "values": [],
+      "kind": "bool",
+      "deprecated": false,
+      "inferred": true
+    }
+  ],
+  "slots": [],
+  "examples": [],
+  "deprecated": false
+}

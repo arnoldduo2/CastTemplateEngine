@@ -1,0 +1,30 @@
+{
+  "description": "",
+  "props": [
+    {
+      "name": "text",
+      "type": null,
+      "description": "",
+      "required": false,
+      "default": "''",
+      "values": [],
+      "kind": "string",
+      "deprecated": false,
+      "inferred": true
+    },
+    {
+      "name": "position",
+      "type": null,
+      "description": "",
+      "required": false,
+      "default": "'top'",
+      "values": [],
+      "kind": "string",
+      "deprecated": false,
+      "inferred": true
+    }
+  ],
+  "slots": [],
+  "examples": [],
+  "deprecated": false
+}

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.0
+
+- **Hover for functional directives**: `@map(...)`, `@filter(...)`, the inline-render transform (`return(...)`/`@cast(...)`), the `@{ ... }` echo hole, and every `.filter`/`.map` segment of a fluent collection chain (`@$items.filter(...).map(...)`) now show hover documentation with accepted parameters and a short example.
+- **Directive bracket highlighting**: a directive's parentheses now carry the same scope as its keyword, so themes color/bold them together (`@if(`...`)`, `@foreach(`...`)`, `@map(`...`)`, `@css(`...`)`, `@script(`...`)`, etc.), matching Laravel Blade's look.
+
 ## 1.5.1
 
 - **Native CSS inside `@css(...)`**: Full syntax highlighting for CSS selectors, properties, values, units, and colors, with support for nested parentheses (`calc()`, `rgba()`) and `@{ ... }` dynamic PHP variables.

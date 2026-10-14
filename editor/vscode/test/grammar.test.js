@@ -150,6 +150,26 @@ handleEvent('click', '.btn', (e, el) => {
   assert.ok(has(find(t, "const"), "storage.type.js"));
 });
 
+test("a directive's parentheses are bold/colored the same as its keyword (Blade-style), for every directive family", { skip }, async () => {
+  const alt = await tokenize("@foreach ($users as $user) x @endforeach");
+  assert.ok(has(find(alt, "("), "keyword.control.directive.cast"), "@foreach's opening paren");
+  assert.ok(has(find(alt, ")"), "keyword.control.directive.cast"), "@foreach's closing paren");
+
+  const map = await tokenize("@map($items, ($item) => $item)");
+  assert.ok(has(find(map, "("), "keyword.control.directive.cast"), "@map's opening paren");
+  assert.ok(has(find(map, ")").filter((s) => !s.includes("meta.embedded")), "keyword.control.directive.cast"), "@map's own closing paren, not a nested one");
+
+  const filter = await tokenize("@filter($items, ($item) => true)");
+  assert.ok(has(find(filter, "("), "keyword.control.directive.cast"), "@filter's opening paren");
+
+  const css = await tokenize("@css(\n.a { color: red; }\n)");
+  assert.ok(has(find(css, "("), "keyword.control.directive.cast"), "@css's opening paren");
+  assert.ok(has(find(css, ")"), "keyword.control.directive.cast"), "@css's closing paren");
+
+  const script = await tokenize("@script(\nconsole.log(1);\n)");
+  assert.ok(has(find(script, "("), "keyword.control.directive.cast"), "@script's opening paren");
+});
+
 test("@map and expressions support HTML tags and @{ } echo inside callbacks", { skip }, async () => {
   const t = await tokenize(`@map($items, ($item, $i) => (
   <li class="list-group-item">

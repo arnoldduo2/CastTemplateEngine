@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 use CastTemplateEngine\CastTemplate;
 use CastTemplateEngine\TemplateError;
+use CastTemplateEngine\Support\ComponentDocs;
 
 spl_autoload_register(function (string $class) {
     $prefix = 'CastTemplateEngine\\';
@@ -72,6 +73,19 @@ function throws(string $needle, callable $fn): void
         return;
     }
     throw new Exception("expected an error containing \"$needle\"");
+}
+
+/** Recursively sorts associative-array keys (for order-independent comparison) while leaving list arrays in order. */
+function normalizeForCompare(mixed $value): mixed
+{
+    if (!is_array($value)) {
+        return $value;
+    }
+    if (array_is_list($value)) {
+        return array_map('normalizeForCompare', $value);
+    }
+    ksort($value);
+    return array_map('normalizeForCompare', $value);
 }
 
 echo "CastTemplate tests\n";
@@ -624,6 +638,26 @@ test('Bundler::build minification and bundling into app.css and app.js with mark
     }
     if (!str_contains($appJs, '/* cast:components:start */') || !str_contains($appJs, "console.log('Button JS loaded');")) {
         throw new Exception("app.js does not contain minified JS or markers:\n$appJs");
+    }
+});
+
+test('Support\ComponentDocs::parseComponent matches the JS docblock reader on every shared fixture', function () {
+    $dir = __DIR__ . '/fixtures/components';
+    $files = array_values(array_filter(scandir($dir), fn (string $f): bool => str_ends_with($f, '.cast.php')));
+    if (count($files) < 8) {
+        throw new Exception('expected at least 8 shared fixtures, found ' . count($files));
+    }
+
+    foreach ($files as $file) {
+        $expectedPath = $dir . '/' . str_replace('.cast.php', '.expected.json', $file);
+        $expected = json_decode(file_get_contents($expectedPath), true);
+        $actual = ComponentDocs::parseComponent(file_get_contents($dir . '/' . $file));
+
+        $a = json_encode(normalizeForCompare($actual));
+        $b = json_encode(normalizeForCompare($expected));
+        if ($a !== $b) {
+            throw new Exception("mismatch for $file\nPHP:      $a\nExpected: $b");
+        }
     }
 });
 
