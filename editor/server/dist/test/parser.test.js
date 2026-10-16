@@ -1,0 +1,103 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+const node_test_1 = require("node:test");
+const assert = __importStar(require("node:assert"));
+const castParser_js_1 = require("../parser/castParser.js");
+(0, node_test_1.describe)('CastParser', () => {
+    const parser = new castParser_js_1.CastParser();
+    (0, node_test_1.test)('parses @props block with strict types, defaults, and extends', () => {
+        const text = `@props extends::Components.Cards.BaseCard {
+    string $title;
+    ?int $count = 0;
+    mixed $extra;
+}
+
+<div class="card">
+    <h1>@{ $title }</h1>
+</div>`;
+        const doc = parser.parse('file:///test.cast.php', text);
+        assert.ok(doc.propsBlock, 'Props block should be parsed');
+        assert.strictEqual(doc.propsBlock.extendsTarget, 'Components.Cards.BaseCard');
+        assert.strictEqual(doc.propsBlock.entries.length, 3);
+        const titleProp = doc.propsBlock.entries[0];
+        assert.strictEqual(titleProp.name, 'title');
+        assert.strictEqual(titleProp.type, 'string');
+        assert.strictEqual(titleProp.isRequired, true);
+        assert.strictEqual(titleProp.defaultValue, undefined);
+        const countProp = doc.propsBlock.entries[1];
+        assert.strictEqual(countProp.name, 'count');
+        assert.strictEqual(countProp.type, '?int');
+        assert.strictEqual(countProp.isNullable, true);
+        assert.strictEqual(countProp.defaultValue, '0');
+        assert.strictEqual(doc.echoHoles.length, 1);
+        assert.strictEqual(doc.echoHoles[0].expression, '$title');
+        assert.strictEqual(doc.diagnostics.length, 0);
+    });
+    (0, node_test_1.test)('detects unclosed component tags', () => {
+        const text = `<Cards.Header title="Sales">
+    <p>Body</p>`;
+        const doc = parser.parse('file:///unclosed.cast.php', text);
+        assert.ok(doc.diagnostics.length > 0, 'Should have diagnostic for unclosed tag');
+        assert.ok(doc.diagnostics[0].message.includes('never closed'));
+    });
+    (0, node_test_1.test)('detects mismatched directives', () => {
+        const text = `@if ($condition)
+    <p>True</p>
+@endforeach`;
+        const doc = parser.parse('file:///mismatched.cast.php', text);
+        assert.ok(doc.diagnostics.length > 0, 'Should have diagnostic for mismatched directive');
+        assert.ok(doc.diagnostics[0].message.includes('Mismatched directive'));
+    });
+    (0, node_test_1.test)('parses components and attributes', () => {
+        const text = `<Button variant="primary" count={$total} active {...$rest} />`;
+        const doc = parser.parse('file:///comp.cast.php', text);
+        assert.strictEqual(doc.components.length, 1);
+        const comp = doc.components[0];
+        assert.strictEqual(comp.name, 'Button');
+        assert.strictEqual(comp.isSelfClosing, true);
+        assert.strictEqual(comp.attributes.length, 4);
+        assert.strictEqual(comp.attributes[0].name, 'variant');
+        assert.strictEqual(comp.attributes[0].value, 'primary');
+        assert.strictEqual(comp.attributes[1].name, 'count');
+        assert.strictEqual(comp.attributes[1].value, '$total');
+        assert.strictEqual(comp.attributes[1].isExpression, true);
+        assert.strictEqual(comp.attributes[2].name, 'active');
+        assert.strictEqual(comp.attributes[2].isBoolean, true);
+        assert.strictEqual(comp.attributes[3].isSpread, true);
+        assert.strictEqual(comp.attributes[3].value, '$rest');
+    });
+});
+//# sourceMappingURL=parser.test.js.map

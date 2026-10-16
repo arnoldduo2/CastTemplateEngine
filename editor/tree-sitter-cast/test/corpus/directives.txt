@@ -1,0 +1,73 @@
+==================
+Conditionals if elseif else
+==================
+@if ($isAdmin)
+    <p>Admin</p>
+@elseif ($isEditor)
+    <p>Editor</p>
+@else
+    <p>Guest</p>
+@endif
+---
+
+(template
+  (if_statement
+    condition: (directive_arguments
+      expression: (argument_expression))
+    consequence: (html_start_tag
+      name: (html_tag_name))
+    consequence: (text)
+    consequence: (html_end_tag
+      name: (html_tag_name))
+    alternative: (elseif_clause
+      condition: (directive_arguments
+        expression: (argument_expression))
+      consequence: (html_start_tag
+        name: (html_tag_name))
+      consequence: (text)
+      consequence: (html_end_tag
+        name: (html_tag_name)))
+    alternative: (else_clause
+      consequence: (html_start_tag
+        name: (html_tag_name))
+      consequence: (text)
+      consequence: (html_end_tag
+        name: (html_tag_name)))))
+
+==================
+Foreach loop
+==================
+@foreach ($users as $user)
+    <li>@{ $user->name }</li>
+@endforeach
+---
+
+(template
+  (foreach_statement
+    arguments: (directive_arguments
+      expression: (argument_expression))
+    body: (html_start_tag
+      name: (html_tag_name))
+    body: (echo_hole
+      expression: (php_expression))
+    body: (html_end_tag
+      name: (html_tag_name))))
+
+==================
+Scoped CSS and Script
+==================
+@css(
+  .btn { color: red; }
+)
+@script(
+  console.log('hi');
+)
+---
+
+(template
+  (css_statement
+    content: (css_content))
+  (script_statement
+    content: (script_content
+      (script_content
+        (single_quoted_string)))))

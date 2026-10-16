@@ -1,0 +1,65 @@
+==================
+Self-closing component with various attributes
+==================
+<Button variant="primary" count={$total} active {...$rest} />
+---
+
+(template
+  (component_element
+    (self_closing_component
+      name: (component_name)
+      (component_attribute
+        (string_attribute
+          name: (attribute_name)
+          value: (double_quoted_string)))
+      (component_attribute
+        (expression_attribute
+          name: (attribute_name)
+          value: (php_expression)))
+      (component_attribute
+        (boolean_attribute
+          name: (attribute_name)))
+      (component_attribute
+        (spread_attribute
+          value: (php_expression))))))
+
+==================
+Paired component with dotted path and named Slot
+==================
+<Cards.UserCard title="Profile">
+    <Slot name="avatar">
+        <Image src="/pic.png" />
+    </Slot>
+    <p>Bio</p>
+</Cards.UserCard>
+---
+
+(template
+  (component_element
+    (paired_component
+      name: (component_name)
+      (component_attribute
+        (string_attribute
+          name: (attribute_name)
+          value: (double_quoted_string)))
+      (component_element
+        (paired_component
+          name: (component_name)
+          (component_attribute
+            (string_attribute
+              name: (attribute_name)
+              value: (double_quoted_string)))
+          (component_element
+            (self_closing_component
+              name: (component_name)
+              (component_attribute
+                (string_attribute
+                  name: (attribute_name)
+                  value: (double_quoted_string)))))
+          close_name: (component_name)))
+      (html_start_tag
+        name: (html_tag_name))
+      (text)
+      (html_end_tag
+        name: (html_tag_name))
+      close_name: (component_name))))

@@ -1,0 +1,24 @@
+==================
+Echo hole interpolation
+==================
+<h1>@{ $title }</h1>
+---
+
+(template
+  (html_start_tag
+    name: (html_tag_name))
+  (echo_hole
+    expression: (php_expression))
+  (html_end_tag
+    name: (html_tag_name)))
+
+==================
+Escaped at sign
+==================
+Contact: info@@example.com
+---
+
+(template
+  (text)
+  (escaped_at)
+  (text))

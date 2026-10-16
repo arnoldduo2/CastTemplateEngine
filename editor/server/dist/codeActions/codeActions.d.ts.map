@@ -1,0 +1,1 @@
+{"version":3,"file":"codeActions.d.ts","sourceRoot":"","sources":["../../src/codeActions/codeActions.ts"],"names":[],"mappings":"AAAA,OAAO,EACL,UAAU,EAEV,gBAAgB,EAGjB,MAAM,uBAAuB,CAAC;AAC/B,OAAO,EAAE,YAAY,EAAE,MAAM,kBAAkB,CAAC;AAEhD,qBAAa,kBAAkB;IACtB,cAAc,CAAC,GAAG,EAAE,YAAY,EAAE,MAAM,EAAE,gBAAgB,GAAG,UAAU,EAAE;IAiChF,OAAO,CAAC,aAAa;CAMtB"}

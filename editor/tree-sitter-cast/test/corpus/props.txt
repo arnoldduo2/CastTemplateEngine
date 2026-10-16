@@ -1,0 +1,41 @@
+==================
+Props declaration with strict types and defaults
+==================
+@props {
+    string $title;
+    ?int $count = 0;
+    string|array $items = [];
+}
+---
+
+(template
+  (props_block
+    (props_entry
+      type: (type_expression
+        (type_identifier))
+      name: (variable_name))
+    (props_entry
+      type: (type_expression
+        (type_identifier))
+      name: (variable_name))
+    (props_entry
+      type: (type_expression
+        (type_identifier)
+        (type_identifier))
+      name: (variable_name))))
+
+==================
+Props with extends inheritance
+==================
+@props extends::Components.Cards.BaseCard {
+    string $subtitle;
+}
+---
+
+(template
+  (props_block
+    extends: (component_path)
+    (props_entry
+      type: (type_expression
+        (type_identifier))
+      name: (variable_name))))
