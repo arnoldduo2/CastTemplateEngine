@@ -661,6 +661,29 @@ test('Support\ComponentDocs::parseComponent matches the JS docblock reader on ev
     }
 });
 
+test('editor/spec/cast-syntax.json stays up to date with Directives and Props', function () {
+    $specPath = __DIR__ . '/../editor/spec/cast-syntax.json';
+    if (!is_file($specPath)) {
+        throw new Exception('cast-syntax.json is missing; run php bin/gen-syntax-spec.php');
+    }
+    $spec = json_decode(file_get_contents($specPath), true);
+    if (!is_array($spec)) {
+        throw new Exception('cast-syntax.json is not valid JSON');
+    }
+
+    $ref = new ReflectionClass(\CastTemplateEngine\Directives::class);
+    $fnDirectives = $ref->getConstant('FUNCTION_DIRECTIVES');
+    if ($spec['functionDirectives'] !== $fnDirectives) {
+        throw new Exception('cast-syntax.json functionDirectives drifted from Directives::FUNCTION_DIRECTIVES');
+    }
+
+    $propsRef = new ReflectionClass(\CastTemplateEngine\Props::class);
+    $types = $propsRef->getConstant('TYPES');
+    if ($spec['props']['supportedTypes'] !== $types) {
+        throw new Exception('cast-syntax.json props.supportedTypes drifted from Props::TYPES');
+    }
+});
+
 echo $failures ? "\n$failures failed\n" : "\nall passed\n";
 exit($failures ? 1 : 0);
 

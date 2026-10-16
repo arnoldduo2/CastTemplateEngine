@@ -20,7 +20,16 @@ final class ConsoleApplication
         self::$initialized = true;
 
         // Register default commands
-        CommandRegistry::register('engine:check', new EngineCheckCommand());
+        $checkCommand = new EngineCheckCommand();
+        $astCommand = new \CastTemplateEngine\Console\Commands\EngineAstCommand();
+
+        CommandRegistry::register('engine:check', $checkCommand);
+        CommandRegistry::register('engine:lint', $checkCommand);
+        CommandRegistry::register('lint', $checkCommand);
+
+        CommandRegistry::register('engine:ast', $astCommand);
+        CommandRegistry::register('ast', $astCommand);
+
         CommandRegistry::register('engine:compile', new EngineCompileCommand());
         CommandRegistry::register('engine:clear', new EngineClearCommand());
         CommandRegistry::register('engine:build', new \CastTemplateEngine\Console\Commands\EngineBuildCommand());

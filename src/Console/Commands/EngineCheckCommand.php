@@ -21,42 +21,75 @@ final class EngineCheckCommand implements CommandInterface
 
     public function execute(array $args): int
     {
-        $targetDir = $args[0] ?? getcwd();
-        $componentsDir = $this->resolveComponentsDir($targetDir);
-        echo "\n[Cast Engine] Scanning for .cast.php template files in {$targetDir}...\n\n";
+        $json = in_array('--json', $args, true);
+        $args = array_values(array_filter($args, fn ($a) => $a !== '--json'));
 
-        $files = $this->findFiles($targetDir);
+        $target = $args[0] ?? getcwd();
+        $targetDir = is_file($target) ? dirname($target) : $target;
+        $componentsDir = $this->resolveComponentsDir($targetDir);
+
+        $files = $this->findFiles($target);
         if (empty($files)) {
-            echo "No .cast.php files found in {$targetDir}.\n";
+            if ($json) {
+                echo json_encode([
+                    'filesChecked' => 0,
+                    'errors' => 0,
+                    'warnings' => 0,
+                    'problems' => [],
+                    'message' => "No .cast.php files found in {$target}."
+                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+            } else {
+                echo "No .cast.php files found in {$target}.\n";
+            }
             return 0;
+        }
+
+        if (!$json) {
+            echo "\n[Cast Engine] Scanning for .cast.php template files in {$target}...\n\n";
         }
 
         $totalErrors = 0;
         $totalWarnings = 0;
+        $allProblems = [];
 
         foreach ($files as $file) {
             $source = (string) @file_get_contents($file);
             $problems = Compiler::lint($source, $file, $componentsDir);
 
-            if (empty($problems)) {
-                echo "  \033[32m✔\033[0m {$file}\n";
-            } else {
-                echo "  \033[31m✖\033[0m {$file}\n";
+            if (!empty($problems)) {
                 foreach ($problems as $problem) {
-                    $isError = $problem['type'] === 'error';
-                    if ($isError) {
+                    $allProblems[] = $problem;
+                    if ($problem['type'] === 'error') {
                         $totalErrors++;
-                        $badge = "\033[31mERROR\033[0m";
                     } else {
                         $totalWarnings++;
-                        $badge = "\033[33mWARN\033[0m ";
                     }
-                    echo "     [line {$problem['line']}] {$badge} {$problem['message']}\n";
+                }
+            }
+
+            if (!$json) {
+                if (empty($problems)) {
+                    echo "  \033[32m✔\033[0m {$file}\n";
+                } else {
+                    echo "  \033[31m✖\033[0m {$file}\n";
+                    foreach ($problems as $problem) {
+                        $badge = $problem['type'] === 'error' ? "\033[31mERROR\033[0m" : "\033[33mWARN\033[0m ";
+                        echo "     [line {$problem['line']}] {$badge} {$problem['message']}\n";
+                    }
                 }
             }
         }
 
-        echo "\n[Cast Engine] Checked " . count($files) . " file(s): {$totalErrors} error(s), {$totalWarnings} warning(s).\n";
+        if ($json) {
+            echo json_encode([
+                'filesChecked' => count($files),
+                'errors' => $totalErrors,
+                'warnings' => $totalWarnings,
+                'problems' => $allProblems
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+        } else {
+            echo "\n[Cast Engine] Checked " . count($files) . " file(s): {$totalErrors} error(s), {$totalWarnings} warning(s).\n";
+        }
 
         return $totalErrors > 0 ? 1 : 0;
     }
