@@ -30,6 +30,9 @@ const {
 
 const SELECTOR = { scheme: "file", pattern: "**/*.cast.php" };
 
+/** The running cast-language-server client, if one was started. Used by deactivate() to stop it. */
+let client;
+
 /** The folders to search for a document: from the settings, and from config/view.php when it names a components folder. */
 function locations(document) {
   const folder = vscode.workspace.getWorkspaceFolder(document.uri);
@@ -792,6 +795,73 @@ async function fixIndentation() {
   await vscode.workspace.applyEdit(edit);
 }
 
+/** Finds the cast-language-server executable: the `cast.languageServer.path` setting, else PATH. */
+function resolveServerCommand() {
+  const config = vscode.workspace.getConfiguration("cast");
+  const configured = config.get("languageServer.path", "");
+  if (configured && fs.existsSync(configured)) return configured;
+
+  try {
+    const { execSync } = require("node:child_process");
+    const isWindows = process.platform === "win32";
+    const cmd = isWindows ? "where cast-language-server" : "which cast-language-server";
+    const out = execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+    const first = out.split("\n")[0].trim();
+    return first && fs.existsSync(first) ? first : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Shows an informational message at most once per global-state key, across sessions. */
+function showOnce(context, key, message) {
+  if (context.globalState.get(key)) return;
+  context.globalState.update(key, true);
+  vscode.window.showInformationMessage(message);
+}
+
+/**
+ * Starts the cast-language-server client, if enabled and found. Degrades silently (a one-time
+ * toast, not an error) when the client library or the server binary isn't available yet — every
+ * hand-rolled provider registered in activate() keeps working either way.
+ */
+function startLanguageClient(context) {
+  const config = vscode.workspace.getConfiguration("cast");
+  if (config.get("languageServer.enable", true) === false) return;
+
+  let LanguageClient;
+  try {
+    ({ LanguageClient } = require("vscode-languageclient/node"));
+  } catch {
+    showOnce(
+      context,
+      "cast.lspClientMissing",
+      "Cast: language server client library not installed. Run `php cast engine:editor-install extension` and reload the window to enable it."
+    );
+    return;
+  }
+
+  const command = resolveServerCommand();
+  if (!command) {
+    showOnce(
+      context,
+      "cast.lspServerMissing",
+      "Cast: cast-language-server not found. Run `php cast engine:editor-install lsp` to install it globally, then reload the window."
+    );
+    return;
+  }
+
+  const serverOptions = {
+    run: { command, args: ["--stdio"] },
+    debug: { command, args: ["--stdio"] },
+  };
+  const clientOptions = { documentSelector: [SELECTOR] };
+
+  client = new LanguageClient("castLanguageServer", "Cast Language Server", serverOptions, clientOptions);
+  context.subscriptions.push({ dispose: () => client && client.stop() });
+  client.start();
+}
+
 function activate(context) {
   const diagnostics = vscode.languages.createDiagnosticCollection("cast");
   context.subscriptions.push(
@@ -848,8 +918,16 @@ function activate(context) {
     );
     (vscode.workspace.textDocuments || []).forEach(refresh);
   }
+
+  try {
+    startLanguageClient(context);
+  } catch (err) {
+    console.error("[Cast] language client failed to start", err);
+  }
 }
 
-function deactivate() {}
+function deactivate() {
+  return client ? client.stop() : undefined;
+}
 
-module.exports = { activate, deactivate, references, locations, publishDiagnostics, spell, indentEdits, autoIndent, Formatter };
+module.exports = { activate, deactivate, references, locations, publishDiagnostics, spell, indentEdits, autoIndent, Formatter, startLanguageClient, resolveServerCommand };

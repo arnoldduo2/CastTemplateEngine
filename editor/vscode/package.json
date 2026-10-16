@@ -116,6 +116,16 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Keep the indentation right while typing in `.cast.php` files: after Enter, and when a line starts with a closing tag, `<?php endif ?>`, `@endif` or `@else`. `Format Document` and `Cast: Fix indentation` re-indent a whole view."
+        },
+        "cast.languageServer.enable": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Enable the Cast language server for richer, PHP-aware intelligence. Requires `php cast engine:editor-install lsp` (or `engine:editor-install all`) to have been run once."
+        },
+        "cast.languageServer.path": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to the `cast-language-server` executable. Leave empty to auto-detect it on PATH."
         }
       }
     },
@@ -150,6 +160,9 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "package": "npx @vscode/vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
   },
   "devDependencies": {
     "vscode-oniguruma": "^2.0.1",

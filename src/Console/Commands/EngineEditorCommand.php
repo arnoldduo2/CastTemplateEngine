@@ -5,22 +5,10 @@ declare(strict_types=1);
 namespace CastTemplateEngine\Console\Commands;
 
 use CastTemplateEngine\Console\CommandInterface;
+use CastTemplateEngine\Console\Support\EditorLocator;
 
 final class EngineEditorCommand implements CommandInterface
 {
-    private const EDITORS = [
-        'antigravity-ide' => ['.antigravity-ide/extensions', '.antigravity/extensions'],
-        'antigravity'     => ['.antigravity-ide/extensions', '.antigravity/extensions'],
-        'agy'             => ['.antigravity-ide/extensions', '.antigravity/extensions'],
-        'code'            => ['.vscode/extensions'],
-        'vscode'          => ['.vscode/extensions'],
-        'insiders'        => ['.vscode-insiders/extensions'],
-        'vscodium'        => ['.vscode-oss/extensions'],
-        'codium'          => ['.vscode-oss/extensions'],
-        'cursor'          => ['.cursor/extensions'],
-        'windsurf'        => ['.windsurf/extensions'],
-    ];
-
     public function getName(): string
     {
         return 'engine:editor';
@@ -46,20 +34,17 @@ final class EngineEditorCommand implements CommandInterface
             }
         }
 
-        $editorDir = realpath(__DIR__ . '/../../../editor/vscode');
-
-        if (!$editorDir || !is_file($editorDir . '/package.json')) {
+        $meta = self::resolveExtensionMeta();
+        if ($meta === null) {
             echo "[Cast Engine] Could not locate editor/vscode package.\n";
             return 1;
         }
 
-        $packageJson = json_decode((string) file_get_contents($editorDir . '/package.json'), true);
-        $version = $packageJson['version'] ?? '1.0.0';
-        $publisher = $packageJson['publisher'] ?? 'anode';
-        $name = $packageJson['name'] ?? 'cast-framework';
-        $extensionId = "{$publisher}.{$name}-{$version}";
+        $editorDir = $meta['dir'];
+        $version = $meta['version'];
+        $extensionId = $meta['id'];
 
-        echo "\n[Cast Engine] Editor extension: {$name} v{$version}\n";
+        echo "\n[Cast Engine] Editor extension: {$meta['name']} v{$version}\n";
 
         $home = getenv('CAST_HOME') ?: getenv('USERPROFILE') ?: getenv('HOME') ?: '';
         if ($home === '') {
@@ -108,49 +93,39 @@ final class EngineEditorCommand implements CommandInterface
     }
 
     /**
+     * Reads editor/vscode/package.json and derives the VS Code extension identity.
+     * Shared with EngineEditorInstallCommand so both commands agree on the target dirs.
+     *
+     * @return array{dir: string, id: string, name: string, version: string}|null
+     */
+    public static function resolveExtensionMeta(): ?array
+    {
+        $editorDir = realpath(__DIR__ . '/../../../editor/vscode');
+        if (!$editorDir || !is_file($editorDir . '/package.json')) {
+            return null;
+        }
+
+        $packageJson = json_decode((string) file_get_contents($editorDir . '/package.json'), true);
+        $version = $packageJson['version'] ?? '1.0.0';
+        $publisher = $packageJson['publisher'] ?? 'anode';
+        $name = $packageJson['name'] ?? 'cast-framework';
+
+        return [
+            'dir' => $editorDir,
+            'id' => "{$publisher}.{$name}-{$version}",
+            'name' => $name,
+            'version' => $version,
+        ];
+    }
+
+    /**
      * @return array<string, string> editorName => targetDirectory
      */
     private function resolveTargets(string $home, string $extensionId, ?string $requestedEditor): array
     {
-        $targets = [];
+        $requestedEditors = ($requestedEditor === null || $requestedEditor === 'all') ? [] : [$requestedEditor];
 
-        if ($requestedEditor !== null && $requestedEditor !== 'all') {
-            $folders = self::EDITORS[$requestedEditor] ?? [".{$requestedEditor}/extensions"];
-            foreach ($folders as $folder) {
-                $dir = $home . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folder);
-                $targets[$requestedEditor] = $dir . DIRECTORY_SEPARATOR . $extensionId;
-                break;
-            }
-            return $targets;
-        }
-
-        // Auto-detect all installed editors or install to all found
-        $detected = [];
-        $candidates = [
-            'Antigravity IDE' => ['.antigravity-ide/extensions', '.antigravity/extensions'],
-            'VS Code'         => ['.vscode/extensions'],
-            'VS Code Insiders'=> ['.vscode-insiders/extensions'],
-            'Cursor'          => ['.cursor/extensions'],
-            'Windsurf'        => ['.windsurf/extensions'],
-            'VSCodium'        => ['.vscode-oss/extensions'],
-        ];
-
-        foreach ($candidates as $name => $folders) {
-            foreach ($folders as $folder) {
-                $parent = $home . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folder);
-                if (is_dir($parent)) {
-                    $detected[$name] = $parent . DIRECTORY_SEPARATOR . $extensionId;
-                    break;
-                }
-            }
-        }
-
-        // If none found, fallback to VS Code default
-        if (empty($detected)) {
-            $detected['VS Code'] = $home . DIRECTORY_SEPARATOR . '.vscode' . DIRECTORY_SEPARATOR . 'extensions' . DIRECTORY_SEPARATOR . $extensionId;
-        }
-
-        return $detected;
+        return EditorLocator::resolve($home, $extensionId, $requestedEditors);
     }
 
     private function removeDirectory(string $dir): void

@@ -8,6 +8,7 @@ use CastTemplateEngine\Console\Commands\EngineCheckCommand;
 use CastTemplateEngine\Console\Commands\EngineClearCommand;
 use CastTemplateEngine\Console\Commands\EngineCompileCommand;
 use CastTemplateEngine\Console\Commands\EngineEditorCommand;
+use CastTemplateEngine\Console\Commands\EngineEditorInstallCommand;
 use CastTemplateEngine\Console\Commands\EngineSnippetsCommand;
 
 final class ConsoleApplication
@@ -35,6 +36,9 @@ final class ConsoleApplication
         CommandRegistry::register('engine:build', new \CastTemplateEngine\Console\Commands\EngineBuildCommand());
         CommandRegistry::register('engine:snippets', new EngineSnippetsCommand());
         CommandRegistry::register('engine:editor', new EngineEditorCommand());
+        CommandRegistry::register('engine:editor-install', new EngineEditorInstallCommand('install'));
+        CommandRegistry::register('engine:editor-update', new EngineEditorInstallCommand('update'));
+        CommandRegistry::register('engine:editor-uninstall', new EngineEditorInstallCommand('uninstall'));
     }
 
     /**
@@ -91,6 +95,9 @@ final class ConsoleApplication
         echo "  php cast engine:compile            Precompile templates into cache folder\n";
         echo "  php cast engine:clear              Clear template cache\n";
         echo "  php cast engine:snippets           Show template code snippets\n";
-        echo "  php cast engine:editor install     Install/Update VS Code extension\n\n";
+        echo "  php cast engine:editor install     Install/Update VS Code extension\n";
+        echo "  php cast engine:editor-install lsp               Install the global cast-language-server\n";
+        echo "  php cast engine:editor-install extension --cursor  Install the extension into Cursor only\n";
+        echo "  php cast engine:editor-install all               Install the extension (all detected editors) + LSP server\n\n";
     }
 }

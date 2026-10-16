@@ -18,14 +18,35 @@ Highlighting and navigation for the views of a [CastFramework](https://github.co
 
 ## Install
 
-The extension ships inside the framework package. In your project:
+The extension ships inside the framework package. In your project, install both the extension
+and the global `cast-language-server` (with a requirements check for Node.js, npm and PHPactor):
 
 ```bash
-php cast editor:install
+php cast engine:editor-install all
 ```
 
-It copies the extension into the extensions folder of every VS Code family editor it finds (VS Code, Insiders, VSCodium, Cursor, Antigravity, Windsurf). Reload the window afterwards.
-`--editor=code|insiders|vscodium|cursor|antigravity|windsurf` picks one, `--dir=PATH` installs into any extensions folder, `--uninstall` removes it.
+Or install just one of the two:
+
+```bash
+php cast engine:editor-install extension     # extension only, auto-detects installed editors
+php cast engine:editor-install lsp           # global cast-language-server only
+```
+
+Pick a specific editor with a boolean flag instead of auto-detecting:
+
+```bash
+php cast engine:editor-install extension --cursor
+php cast engine:editor-install extension --antigravity-ide --vscode   # multiple at once
+```
+
+`php cast engine:editor-update [all|extension|lsp]` and `php cast engine:editor-uninstall [all|extension|lsp]`
+follow the same grammar. Reload the editor window afterwards.
+
+`--yes`/`-y` auto-confirms the PHPactor download prompt (for CI/non-interactive use); `--no-phpactor` skips
+it; `--dry-run` prints what would happen without changing anything.
+
+The older, extension-only `php cast engine:editor install [--editor=<name>]` still works unchanged.
+
 A packaged `.vsix` (`npm run package`) can also be installed with *Extensions: Install from VSIX...*. A Marketplace release will follow.
 
 ## Settings
@@ -38,10 +59,17 @@ A packaged `.vsix` (`npm run package`) can also be installed with *Extensions: I
 | `cast.extension` | `.cast.php` | The extension of view and component files. |
 | `cast.autoIndent` | `true` | Keep the indentation right while typing in `.cast.php` files (after Enter; lines that become `</div>`, `<?php endif ?>`, `@endif`, `@else`). |
 | `cast.diagnostics`, `cast.propCase` | `hint`, `camel` | Problems in component tags; how prop names are written when completed. |
+| `cast.languageServer.enable` | `true` | Enable the `cast-language-server` client. |
+| `cast.languageServer.path` | `""` | Absolute path to `cast-language-server`; empty auto-detects it on PATH. |
 
 ## Language Server Protocol & Architecture
 
-Since v2.0.0, CastFramework integrates a dedicated TypeScript Language Server (`cast-language-server`) and standalone Tree-sitter grammar (`tree-sitter-cast`):
+Since v2.0.0, CastFramework integrates a dedicated TypeScript Language Server (`cast-language-server`).
+The extension launches it automatically once it's installed (`php cast engine:editor-install lsp`) and
+resolvable on PATH — see `cast.languageServer.enable`/`cast.languageServer.path` below to disable it or
+point at a specific binary. Without it, every feature above still works; only the deeper PHP-aware
+intelligence (via PHPactor) is unavailable. (A standalone Tree-sitter grammar, `tree-sitter-cast`, also
+exists in the repo but isn't wired into the server yet.)
 
 - **Strict-Typed `@props` Diagnostics**: Validates `@props { ... }` syntax, prop types, defaults, required parameters, and `extends::` inheritance targets in real time.
 - **Diagnostics & Code Actions**: Sub-millisecond syntax error detection, unclosed or mismatched tags, unbalanced directives, and quick fixes.

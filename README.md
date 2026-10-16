@@ -524,6 +524,11 @@ php cast engine:clear              # Clear compiled template cache
 php cast engine:editor install     # Install or update extension for all detected editors (VS Code, Antigravity IDE, Cursor, etc.)
 php cast engine:editor --editor=antigravity-ide # Install specifically for Antigravity IDE
 php cast engine:editor --editor=code            # Install specifically for VS Code
+
+php cast engine:editor-install all              # Install the extension + the global cast-language-server, with a requirements check
+php cast engine:editor-install lsp              # Install/update just the global cast-language-server
+php cast engine:editor-install extension --cursor # Install just the extension, into Cursor only
+php cast engine:editor-uninstall all            # Uninstall both
 ```
 
 Commands can also be called with space syntax (`php cast engine check`, `php cast ast <file>`) and can be extended by CastFramework via `CastTemplateEngine\Console\CommandRegistry::register(...)`.

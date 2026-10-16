@@ -36,3 +36,11 @@ npm install
 npm run build
 npm test
 ```
+
+## Install (global)
+
+From the project root, `php cast engine:editor-install lsp` (or `engine:editor-install all`, which also
+installs the VS Code extension) runs the steps above and then `npm install -g` from this directory, so
+`cast-language-server` is resolvable from any project afterwards. It also checks for Node.js/npm and
+offers to download a pinned, checksum-verified PHPactor phar into `bin/phpactor.phar` if missing (PHP
+intelligence is disabled, not required, when PHPactor isn't present — see `src/php/engine.ts`).
