@@ -1,6 +1,6 @@
 {
   "name": "anode/cast-template-engine",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "CastTemplateEngine: React-style components (tags, props, children, slots) on top of native PHP templates.",
   "type": "library",
   "license": "MIT",

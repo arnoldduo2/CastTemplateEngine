@@ -2,6 +2,10 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 2.1.1
+
+- **Fix (Windows)**: `engine:editor-install` failed with `Cannot find module ...\node_modules\npm\bin\npm-cli.js`. The installer now resolves `npm`/`npx` shims to their absolute `.cmd`/`.exe` path before running them, so language-server and extension dependency installs work.
+
 ## 2.1.0
 
 - **Unified editor installer (`engine:editor-install` / `-update` / `-uninstall`)**: installs the VS Code
