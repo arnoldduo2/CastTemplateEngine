@@ -540,7 +540,7 @@ class Completions {
 
     if (context.type === "tag") {
       for (const { tag, file } of listComponents(where.componentDirs, where.ext)) {
-        const spec = specOf(file);
+        const spec = specOf(file, where);
         const item = new vscode.CompletionItem(tag, Kind.Class);
         item.detail = spec && spec.description ? spec.description.split("\n")[0] : "component";
         if (spec) item.documentation = markdownFor(file, spec, tag);

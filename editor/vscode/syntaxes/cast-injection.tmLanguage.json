@@ -17,6 +17,9 @@
       "include": "#directive-js"
     },
     {
+      "include": "#directive-props"
+    },
+    {
       "include": "#directive-chain"
     },
     {
@@ -447,6 +450,80 @@
         },
         {
           "include": "source.js"
+        }
+      ]
+    },
+    "directive-props": {
+      "begin": "(?<![\\w.@])(@)(props)\\b(?:\\s+(extends)(::)([A-Za-z_][\\w.]*))?\\s*(\\{)",
+      "end": "(\\})",
+      "name": "meta.directive.props.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast keyword.control.directive.styled.cast"
+        },
+        "2": {
+          "name": "keyword.control.directive.cast keyword.control.directive.styled.cast"
+        },
+        "3": {
+          "name": "keyword.control.directive.cast keyword.control.directive.styled.cast"
+        },
+        "4": {
+          "name": "punctuation.accessor.cast"
+        },
+        "5": {
+          "name": "entity.name.tag.component.cast support.class.component.cast"
+        },
+        "6": {
+          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast punctuation.section.directive.scope.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast punctuation.section.directive.scope.end.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#props-nullable-type"
+        },
+        {
+          "include": "#props-brace-group"
+        },
+        {
+          "include": "source.php"
+        }
+      ]
+    },
+    "props-nullable-type": {
+      "comment": "A leading `?Type` at the start of a @props{} entry (e.g. `?string $x = null;`) is PHP's nullable-type syntax, not a ternary - but php.tmLanguage.json's own grammar only recognizes that distinction inside a real parameter list/return-type position, never at this directive's own top (bare) statement level. Left to source.php alone, it treats the `?` as the start of a ternary `?:` expression, which never finds its own `:` and keeps scanning indefinitely - silently swallowing the directive's own closing `}` (and everything after it) into that unclosed ternary scope. Matching the `?` here first, before source.php ever sees it, prevents that misparse. Anchored to the start of a line (optionally after whitespace) because every @props{} entry is written one per line - a real ternary's `?` is always preceded by a condition expression earlier on the same line, never alone at line-start.",
+      "match": "(?<=^[ \\t]*)\\?(?=[A-Za-z_])",
+      "name": "keyword.operator.type.nullable.php"
+    },
+    "props-brace-group": {
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#props-nullable-type"
+        },
+        {
+          "include": "#props-brace-group"
+        },
+        {
+          "include": "source.php"
         }
       ]
     },

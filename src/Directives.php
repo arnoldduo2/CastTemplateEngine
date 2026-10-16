@@ -178,8 +178,10 @@ final class Directives
             if (preg_match('/\G@([A-Za-z_][A-Za-z0-9_]*)\b/', $this->src, $fm, 0, $p) && isset(self::FUNCTION_DIRECTIVES[$fm[1]])) {
                 return $this->functionDirective($fm[1], $fm[0], $line);
             }
-            // If it looks like a directive call @foo(...) or an unclosed/unknown @end...
-            if (preg_match('/\G@([A-Za-z_][A-Za-z0-9_]*)(?:\s*\(|(?<=@end)[A-Za-z0-9_]+)/', $this->src, $unrecognized, 0, $p)) {
+            // If it looks like a directive call @foo(...), a @props{...} block (stray/duplicate - a well-formed,
+            // single one never reaches here, since Compiler::extractOwnProps() strips it before this runs), or an
+            // unclosed/unknown @end...
+            if (preg_match('/\G@([A-Za-z_][A-Za-z0-9_]*)(?:\s*\(|\s*\{|(?<=@end)[A-Za-z0-9_]+)/', $this->src, $unrecognized, 0, $p)) {
                 $this->fail("Unknown directive \"@{$unrecognized[1]}\"", $line);
             }
             $this->pos++;

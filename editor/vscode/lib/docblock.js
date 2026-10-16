@@ -58,6 +58,27 @@ function parseComponent(source) {
   }
 
   for (const prop of spec.props) finish(prop);
+
+  // @props{}: a required-by-lazy-require here, not a top-level one - propsBlock.js itself requires this file
+  // (readType/finish/newProp), so a top-level require would be circular. @props{}'s type/required/default/kind
+  // win over a docblock's for the same name, but the docblock's own description text is kept if @props{} didn't
+  // produce one - this lets a description stay hand-written prose even once @props{} is the enforced source of
+  // type/required/default for that same prop.
+  const { parsePropsBlock } = require("./propsBlock");
+  const propsBlock = parsePropsBlock(source);
+  for (const prop of propsBlock.props) {
+    const existing = byName.get(prop.name);
+    if (existing && !prop.description) prop.description = existing.description;
+    byName.set(prop.name, prop);
+    const i = spec.props.findIndex((p) => p.name === prop.name);
+    if (i === -1) spec.props.push(prop);
+    else spec.props[i] = prop;
+  }
+  // `@props extends::Dotted.Path{}` - resolving the path to a file and merging its own props is left to
+  // components.js's specOf() (parseComponent() is pure text, with no filesystem/componentDirs access of its own,
+  // the same separation of concerns as Props::scan() vs Compiler::mergeExtendedProps() on the PHP side).
+  if (propsBlock.extends) spec.extends = propsBlock.extends;
+
   return spec;
 }
 
@@ -287,4 +308,4 @@ function camel(name) {
   return name.replace(/[-_]+([A-Za-z0-9])/g, (_, c) => c.toUpperCase()).replace(/^[A-Z]/, (c) => c.toLowerCase());
 }
 
-module.exports = { parseComponent, camel, splitUnion, readType };
+module.exports = { parseComponent, camel, splitUnion, readType, finish, newProp };

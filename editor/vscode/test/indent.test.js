@@ -47,6 +47,11 @@ test("the same alignment applies inside @script()/@css() block content", () => {
   assert.equal(out, `@script(\n    function f() {\n        /**\n         *Doc\n         */\n        return 1;\n    }\n)`);
 });
 
+test("@props{ ... }: its body indents one level deeper and the closing } outdents back to the opener's level, with a nested call's own parens not confusing the depth", () => {
+  const out = fmt(`@props{\nstring $tag = 'button';\nstring $size = strtoupper('demo');\nbool $disabled = false;\n}\n<button></button>`);
+  assert.equal(out, `@props{\n    string $tag = 'button';\n    string $size = strtoupper('demo');\n    bool $disabled = false;\n}\n<button></button>`);
+});
+
 test("an already-correctly-aligned doc comment is left byte-identical (idempotent)", () => {
   const src = `<?php\n/**\n * A styled thing.\n *\n * @var string $x Some var\n */\n$x = 1;\n?>`;
   assert.equal(fmt(src), src);

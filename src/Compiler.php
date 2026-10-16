@@ -25,12 +25,16 @@ final class Compiler
     private int $len = 0;
     private int $pos = 0;
     private string $out = '';
-    /** @var list<array{string, int}> open tags: [name, line] */
+    /** @var list<array{string, int, list<string>}> open tags: [name, line, still-missing required prop names (see Props)] */
     private array $open = [];
     /** line where the expression being compiled starts, for error messages */
     private int $exprLine = 0;
     /** @var array<string, string> original class name => scoped name (see Css::scanClassRenames()), computed once per compile() from the raw source */
     private array $classRenames = [];
+    /** @var array<string, list<array>> resolved component path => its own fully-merged declared @props{} (see Props::scan(), mergeExtendedProps()), read at most once per compile() */
+    private array $targetPropsCache = [];
+    /** @var list<string> resolved paths (or $this->file, for the entry file's own block) currently being resolved through an @props extends:: chain, to detect a cycle */
+    private array $extendsChain = [];
 
     public function __construct(
         private string $componentsDir,
@@ -41,6 +45,7 @@ final class Compiler
     public function compile(string $source): string
     {
         $this->classRenames = Css::scanClassRenames($source);
+        $source = $this->extractOwnProps($source);   // @props{ ... }, before Directives ever sees it (see Props)
         $source = (new Directives($this->file, $this->classRenames))->compile($source);     // @{ }, @foreach ... @endforeach
         $this->src = $source;
         $this->len = strlen($source);
@@ -77,6 +82,69 @@ final class Compiler
         }
 
         return $this->out;
+    }
+
+    /**
+     * `@props{ ... }` (see Props): scans the raw source for the file's own declaration, rejects it if the file
+     * still also uses the legacy `$name ??= ...;` convention for a name it declares (the prelude below already
+     * assigns that name unconditionally, so the old line would become silent dead code), and replaces the block
+     * *in place* with a prelude of Props::check() calls - not relocated to the very top of the file, since
+     * `declare(strict_types=1);` (CastTemplate::compile()'s own cache step strips it via a regex anchored to the
+     * start of the file) has to remain the literal first statement a component file's own leading `<?php ?>` block
+     * already puts it as. Leaving the prelude exactly where `@props{}` itself was - which Props::scan() already
+     * requires to be before any markup - keeps it after any such leading setup code without needing to find or
+     * reason about where that code ends. Line-count-preserving the same way emit() already is: the prelude is kept
+     * to one PHP statement per line as far as possible, then padded with trailing newlines to match the original
+     * block's own newline count, so every later line number is unaffected (a default expression that itself spans
+     * multiple lines is the one case this can't fully preserve - an accepted, documented limitation, same style as
+     * Css::scanClassRenames()'s own).
+     */
+    private function extractOwnProps(string $source): string
+    {
+        $scan = Props::scan($source, $this->file);
+        if ($scan['start'] === null) return $source;
+
+        $props = $this->mergeExtendedProps($scan, $this->file, $this->file, $source);
+        $this->checkNoLegacyDefaults($source, $props);
+
+        $prelude = $this->emitPropsPrelude($props);
+        $spanLines = substr_count($source, "\n", $scan['start'], $scan['end'] - $scan['start']);
+        $preludeLines = substr_count($prelude, "\n");
+        if ($prelude !== '' && $spanLines > $preludeLines) {
+            $prelude = substr($prelude, 0, -2) . str_repeat("\n", $spanLines - $preludeLines) . '?>';
+        }
+
+        return substr($source, 0, $scan['start']) . $prelude . substr($source, $scan['end']);
+    }
+
+    /** @param list<array{name: string}> $props */
+    private function checkNoLegacyDefaults(string $source, array $props): void
+    {
+        foreach ($props as $p) {
+            $pattern = '/\$' . preg_quote($p['name'], '/') . '\s*\?\?=/';
+            if (preg_match($pattern, $source, $m, PREG_OFFSET_CAPTURE)) {
+                $line = substr_count($source, "\n", 0, $m[0][1]) + 1;
+                $this->fail("\${$p['name']} is declared in @props{} and also uses the legacy '\${$p['name']} ??= ...' convention - remove the ??= line, its default now belongs in @props{}", $line);
+            }
+        }
+    }
+
+    /** @param list<array{name: string, types: list<string>, nullable: bool, required: bool, default: ?string, line: int}> $props */
+    private function emitPropsPrelude(array $props): string
+    {
+        if (!$props) return '';
+        $file = var_export($this->file, true);
+        $stmts = [];
+        foreach ($props as $p) {
+            $key = var_export($p['name'], true);
+            $types = '[' . implode(', ', array_map(static fn(string $t): string => var_export($t, true), $p['types'])) . ']';
+            $fallback = $p['default'] !== null ? '(' . $p['default'] . ')' : 'null';
+            $required = $p['required'] ? 'true' : 'false';
+            $nullable = $p['nullable'] ? 'true' : 'false';
+            $stmts[] = "\${$p['name']} = \\CastTemplateEngine\\Props::check($key, array_key_exists($key, \$props) ? \$props[$key] : $fallback, array_key_exists($key, \$props), $required, $types, $nullable, $file, {$p['line']});";
+        }
+        // one PHP statement per prop, kept on a single line as far as possible - see extractOwnProps() for why
+        return '<?php ' . implode(' ', $stmts) . ' ?>';
     }
 
     /**
@@ -162,6 +230,11 @@ final class Compiler
             if (!$last || $last[0] !== $name) {
                 $this->fail("Unexpected </$name>" . ($last ? ", expected </{$last[0]}>" : ''), $line);
             }
+            // a required prop can be supplied by <Slot name="x">...</Slot> instead of an attribute (matches the
+            // editor extension's own diagnostic, lib/complete.js's isProvidedBySlot()) - deferred until here, the
+            // closing tag, so every <Slot> between open and close has already had its chance to satisfy one; the
+            // error still points at the *opening* tag's line, where the component was actually invoked.
+            if ($name !== 'Slot' && $last[2]) $this->failMissingProps($name, $last[2], $last[1]);
             $code = $name === 'Slot'
                 ? '<?php $this->endSlot(); ?>'
                 : '<?= $this->close() ?>';
@@ -176,17 +249,25 @@ final class Compiler
             if (!$this->open || end($this->open)[0] === 'Slot') {
                 $this->fail('<Slot> must be placed directly inside a component', $line);
             }
-            $this->open[] = [$name, $line];
+            $slotName = CastTemplate::camel(substr($s[1], 1, -1));
+            $parent = array_key_last($this->open);
+            $this->open[$parent][2] = array_values(array_filter(
+                $this->open[$parent][2],
+                static fn(string $p): bool => CastTemplate::camel($p) !== $slotName,
+            ));
+            $this->open[] = [$name, $line, []];
             return $this->emit("<?php \$this->slot({$s[1]}); ?>", $start);
         }
 
-        $path = $this->resolveOrFail($name, $line);
-        [$props, $selfClosing] = $this->attributes($name);
+        $path = $this->resolveOrFail($name, $line, $resolved);
+        [$props, $selfClosing, $literalKeys, $hasSpread] = $this->attributes($name);
+        $missing = $this->missingRequiredProps($this->declaredPropsOf($resolved), $literalKeys, $hasSpread);
 
         if ($selfClosing) {
+            if ($missing) $this->failMissingProps($name, $missing, $line);
             return $this->emit("<?= \$this->component($path, $props) ?>", $start);
         }
-        $this->open[] = [$name, $line];
+        $this->open[] = [$name, $line, $missing];
         return $this->emit("<?php \$this->open($path, $props); ?>", $start);
     }
 
@@ -271,27 +352,30 @@ final class Compiler
 
     // -------------------------------------------------------------- attributes
 
-    /** @return array{string, bool} PHP array literal of the props, self-closing flag */
+    /** @return array{string, bool, list<string>, bool} PHP array literal of the props, self-closing flag, literal attribute names written on the tag, whether a {...$spread} is present */
     private function attributes(string $tag): array
     {
         $items = [];
+        $literalKeys = [];
+        $hasSpread = false;
         while (true) {
             $this->skipSpace();
             if ($this->pos >= $this->len) $this->fail("Unterminated <$tag> tag");
 
             if (substr_compare($this->src, '/>', $this->pos, 2) === 0) {
                 $this->pos += 2;
-                return ['[' . implode(', ', $items) . ']', true];
+                return ['[' . implode(', ', $items) . ']', true, $literalKeys, $hasSpread];
             }
             if ($this->src[$this->pos] === '>') {
                 $this->pos++;
-                return ['[' . implode(', ', $items) . ']', false];
+                return ['[' . implode(', ', $items) . ']', false, $literalKeys, $hasSpread];
             }
 
             if ($this->src[$this->pos] === '{') {
                 $expr = trim($this->expression($this->braces()));
                 if (!str_starts_with($expr, '...')) $this->fail("Expected {...\$props} in <$tag>, got {{$expr}}");
                 $items[] = $expr;
+                $hasSpread = true;
                 continue;
             }
 
@@ -299,6 +383,7 @@ final class Compiler
                 $this->fail("Invalid attribute in <$tag> near \"" . substr($this->src, $this->pos, 20) . '"');
             }
             $key = var_export($m[0], true);
+            $literalKeys[] = $m[0];
             $this->pos += strlen($m[0]);
 
             $this->skipSpace();
@@ -349,10 +434,12 @@ final class Compiler
                     && ($path = $this->resolve($m[1])) !== null
                 ) {
                     $this->pos += strlen($m[0]);
-                    [$props, $selfClosing] = $this->attributes($m[1]);
+                    [$props, $selfClosing, $literalKeys, $hasSpread] = $this->attributes($m[1]);
                     if (!$selfClosing) {
                         $this->fail("<{$m[1]}> inside { } must be self-closing. Use <Slot> for blocks with children");
                     }
+                    $missing = $this->missingRequiredProps($this->declaredPropsOf($path), $literalKeys, $hasSpread);
+                    if ($missing) $this->failMissingProps($m[1], $missing, $this->line($this->pos));
                     $result .= '$this->component(' . var_export($path, true) . ", $props)";
                     continue;
                 }
@@ -445,13 +532,93 @@ final class Compiler
 
     // ----------------------------------------------------------------- helpers
 
-    private function resolveOrFail(string $name, int $line): string
+    private function resolveOrFail(string $name, int $line, ?string &$raw = null): string
     {
-        $path = $this->resolve($name, $tried);
-        if ($path === null) {
+        $raw = $this->resolve($name, $tried);
+        if ($raw === null) {
             $this->fail("Component <$name> not found. Looked for: " . implode(', ', $tried), $line);
         }
-        return var_export($path, true);
+        return var_export($raw, true);
+    }
+
+    /** The target component's own fully-merged declared @props{} (see Props::scan(), mergeExtendedProps()) - a light text read, not a recursive compile; read at most once per resolved path per compile(). @return list<array{name: string, types: list<string>, nullable: bool, required: bool, default: ?string, line: int}> */
+    private function declaredPropsOf(string $resolvedPath): array
+    {
+        if (isset($this->targetPropsCache[$resolvedPath])) return $this->targetPropsCache[$resolvedPath];
+        $file = $this->componentsDir . '/' . $resolvedPath . $this->ext;
+        $content = is_file($file) ? (string) file_get_contents($file) : '';
+        $scan = $content !== '' ? Props::scan($content, $file) : ['props' => [], 'extends' => null, 'start' => null];
+        $props = $this->mergeExtendedProps($scan, $resolvedPath, $file, $content);
+        return $this->targetPropsCache[$resolvedPath] = $props;
+    }
+
+    /**
+     * Resolves `@props extends::Dotted.Path{...}` (see Props::scan()'s `extends` key) and merges the base
+     * component's own already-merged prop list with this block's own: the base's entries first, in its own order
+     * (a name the child redeclares keeps the base's position, but the child's entry - type, default, required -
+     * replaces it entirely rather than merging field by field), then any names new to the child, in the order it
+     * declared them. A plain @props{} (`extends === null`) is returned unchanged.
+     *
+     * `$ownerPath` identifies the file *being* scanned (its resolved component path, or `$this->file` for the
+     * entry file's own block) and is only used to detect a cycle (an extends:: chain that loops back on itself)
+     * via `$this->extendsChain`, pushed/popped around the recursive call into the base. `$ownerFile`/`$ownerSource`
+     * are that same file's own name and raw text, used to report a "not found"/"circular" error pointing at its
+     * own `@props extends::` line - the same TemplateError convention Props::scan()'s own errors already use -
+     * rather than at wherever in some other file this compiler instance happens to be positioned right now.
+     * @param array{props: list<array>, extends: ?string, start: ?int} $scan
+     * @return list<array>
+     */
+    private function mergeExtendedProps(array $scan, string $ownerPath, string $ownerFile, string $ownerSource): array
+    {
+        if ($scan['extends'] === null) return $scan['props'];
+        $line = substr_count($ownerSource, "\n", 0, $scan['start']) + 1;
+
+        $basePath = $this->resolve($scan['extends']);
+        if ($basePath === null) {
+            throw new TemplateError("Component \"{$scan['extends']}\" (used in @props extends::) not found in $ownerFile on line $line", $ownerFile, $line);
+        }
+        if ($basePath === $ownerPath || in_array($basePath, $this->extendsChain, true)) {
+            throw new TemplateError("circular @props extends:: chain involving \"$basePath\" in $ownerFile on line $line", $ownerFile, $line);
+        }
+
+        $this->extendsChain[] = $ownerPath;
+        try {
+            $baseProps = $this->declaredPropsOf($basePath);
+        } finally {
+            array_pop($this->extendsChain);
+        }
+
+        $merged = [];
+        foreach ($baseProps as $p) $merged[$p['name']] = $p;
+        foreach ($scan['props'] as $p) $merged[$p['name']] = $p;
+        return array_values($merged);
+    }
+
+    /**
+     * The target's own required prop names (camelCased) that are definitely missing from this call: not among the
+     * tag's literal attribute names, and no {...$spread} is present that could supply them dynamically (the
+     * compiler cannot know what a spread will contain, so it never flags anything when one is present). `children`
+     * is excluded - CastTemplate::component() always supplies it.
+     * @param list<array{name: string, required: bool}> $declaredProps
+     * @param list<string> $literalKeys
+     * @return list<string>
+     */
+    private function missingRequiredProps(array $declaredProps, array $literalKeys, bool $hasSpread): array
+    {
+        if ($hasSpread) return [];
+        $have = array_map([CastTemplate::class, 'camel'], $literalKeys);
+        $missing = [];
+        foreach ($declaredProps as $p) {
+            if (!$p['required'] || $p['name'] === 'children') continue;
+            if (!in_array(CastTemplate::camel($p['name']), $have, true)) $missing[] = $p['name'];
+        }
+        return $missing;
+    }
+
+    private function failMissingProps(string $tagName, array $missing, int $line): void
+    {
+        $s = count($missing) > 1 ? 's' : '';
+        $this->fail("<$tagName> is missing required prop$s \"" . implode('", "', $missing) . '"', $line);
     }
 
     private function space(): string

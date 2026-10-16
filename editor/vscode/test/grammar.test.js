@@ -205,6 +205,40 @@ test("@css/@js/@scripts/@styles/@map/@filter (and the fluent .filter()/.map() ch
   assert.ok(has(find(ifTok, "if"), "keyword.control.directive.cast"), "but @if still keeps its original scope, unaffected");
 });
 
+test("@props{ ... } gets the same styled-keyword/accented-brace treatment as @css/@map, and its body highlights as real PHP (type keywords, variables)", { skip }, async () => {
+  const styledWord = "keyword.control.directive.styled.cast";
+  const braceOpen = "punctuation.section.directive.scope.begin.cast";
+  const braceClose = "punctuation.section.directive.scope.end.cast";
+
+  const t = await tokenize("@props{\nstring $tag = 'button';\nbool $disabled = false;\n}\n<button></button>");
+  assert.ok(has(find(t, "props"), styledWord), "the props keyword itself is styled");
+  assert.ok(has(find(t, "{"), braceOpen), "the opening brace is accented");
+  assert.ok(has(find(t, "}"), braceClose), "the closing brace is accented");
+  assert.ok(has(find(t, "string"), "storage.type.php"), "the body is real PHP to the grammar - a type keyword highlights as one");
+  assert.ok(has(find(t, "button"), "meta.directive.props.cast"), "the whole block, including a default's string literal, is under the directive's own scope");
+});
+
+test("@props{ ... } with a nullable `?Type` entry: the closing } still ends the directive correctly (regression - php.tmLanguage.json treats a bare leading ? as the start of a ternary outside a real parameter list, which never finds its own ':' and silently swallows everything after it, including this directive's own closing brace and every real PHP brace in the rest of the file, unless ?Type is matched explicitly first)", { skip }, async () => {
+  const braceClose = "punctuation.section.directive.scope.end.cast";
+
+  const t = await tokenize("@props{\nstring $a = 'x';\n?string $b = null;\nstring $c = 'y';\n};\n<?php if (true) { echo 1; } ?>");
+  const closers = find(t, "}");
+  assert.ok(has([closers[0]], braceClose), "the directive's own closing } (right after $c's entry) ends it, not later");
+  assert.ok(has([closers[1]], "punctuation.definition.end.bracket.curly.php"), "a real PHP brace afterwards is back to plain PHP scoping, not still inside the directive");
+});
+
+test("@props extends::Dotted.Path{ ... }: extends is styled like the props keyword, :: is its own accessor scope, and the dotted path is scoped like a component reference", { skip }, async () => {
+  const styledWord = "keyword.control.directive.styled.cast";
+  const componentRef = "entity.name.tag.component.cast";
+
+  const t = await tokenize("@props extends::Btns.Btn{\nstring $margin = 'mx-1';\n}\n<div></div>");
+  assert.ok(has(find(t, "props"), styledWord), "the props keyword itself is still styled");
+  assert.ok(has(find(t, "extends"), styledWord), "extends gets the same styled treatment");
+  assert.ok(has(find(t, "::"), "punctuation.accessor.cast"));
+  assert.ok(has(find(t, "Btns.Btn"), componentRef), "the dotted path (captured as one span, same as a single @word directive argument) reads as a component reference");
+  assert.ok(has(find(t, "margin"), "variable.other.php"), "the body past the extends:: prefix is still real PHP");
+});
+
 test("@map and expressions support HTML tags and @{ } echo inside callbacks", { skip }, async () => {
   const t = await tokenize(`@map($items, ($item, $i) => (
   <li class="list-group-item">

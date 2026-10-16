@@ -68,6 +68,37 @@ test("prop names are matched the way the engine camelCases them", () => {
   assert.equal(camel("data-html"), "dataHtml");
 });
 
+test("@props{}: parsed and merged into the same spec, no different from a docblock-declared component to any consumer", () => {
+  const spec = parseComponent(`<?php
+declare(strict_types=1);
+?>
+@props{
+string $tag = 'button';
+string $label;
+};
+<button></button>`);
+  assert.deepEqual(spec.props.map((p) => p.name), ["tag", "label"]);
+  assert.equal(spec.props[1].required, true);
+});
+
+test("@props{}: its type/required/default/kind win over a same-named docblock tag, but the docblock's own description is kept", () => {
+  const spec = parseComponent(`<?php
+/**
+ * @var string $label The old description
+ */
+?>
+@props{
+bool $label = true;
+};
+<div></div>`);
+  assert.equal(spec.props.length, 1, "merged into one entry, not duplicated");
+  const label = spec.props[0];
+  assert.equal(label.type, "bool");
+  assert.equal(label.default, "true");
+  assert.equal(label.required, false);
+  assert.equal(label.description, "The old description", "kept from the docblock, since @props{} itself gave none");
+});
+
 test("odd input does not throw and big files are fast", () => {
   for (const s of ["", "/**", "/** @var */", "/** @var $x */", "$a ??= ", "/** @slot */", "<?php /** @var string|$x */ $x ??= ["]) assert.doesNotThrow(() => parseComponent(s), s);
   const big = "/** @var string $a The a */\n$a ??= 'x';\n".repeat(3000);

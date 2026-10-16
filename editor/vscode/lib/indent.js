@@ -2,7 +2,7 @@
 /**
  * Indentation for .cast.php views: HTML tags, component tags (<Card>, <Btns.Button />), PHP alternative syntax
  * (`<?php if (x): ?> ... <?php endif ?>`, braces, multi-line `<?php ... ?>` blocks) and the engine's @ directives
- * (@if ... @endif, @foreach, @forelse/@empty, @switch/@case, @php ... @endphp).
+ * (@if ... @endif, @foreach, @forelse/@empty, @switch/@case, @php ... @endphp, @props{ ... }).
  *
  * It only ever changes the leading whitespace of a line. Lines inside <script>, <style>, <pre>, <textarea>, HTML comments and
  * heredocs are left exactly as they are. Markup that is opened and closed in different `@if` branches is tolerated: a closer
@@ -258,7 +258,7 @@ class Scanner {
     }
     const before = i > 0 ? text[i - 1] : "";
     if (before && /[\w.]/.test(before)) return 0;
-    const m = /^@(forelse|foreach|elseif|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|switch|unless|isset|default|empty|else|case|for|while|if|php|break|continue|map|filter|scripts|styles|script|js|css)\b/.exec(text.slice(i));
+    const m = /^@(forelse|foreach|elseif|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|switch|unless|isset|default|empty|else|case|for|while|if|php|break|continue|map|filter|scripts|styles|script|js|css|props)\b/.exec(text.slice(i));
     if (!m) return 0;
     const word = m[1];
     let length = m[0].length;
@@ -290,6 +290,14 @@ class Scanner {
       if (!hasArgs) {
         this.mode = "block";
         this.push("call", word);
+      }
+    } else if (word === "props") {
+      this.content(ctx);
+      const brace = /^[ \t]*\{/.exec(text.slice(j));
+      if (brace) {
+        length = j + brace[0].length - i;
+        this.mode = "block";
+        this.push("propsBlock", word);
       }
     } else if (OPEN_DIRECTIVES.has(word)) {
       this.content(ctx);
@@ -455,7 +463,7 @@ class Scanner {
     return n;
   }
 
-  /** The body of `@css(`/`@script(`/`@js(`: bare `{`/`}`/`(`/`)` nesting (not PHP), same bracket-stack idiom as scanPhp. */
+  /** The body of `@css(`/`@script(`/`@js(`/`@props{`: bare `{`/`}`/`(`/`)` nesting (not PHP), same bracket-stack idiom as scanPhp. */
   scanBlock(text, i, ctx) {
     const n = text.length;
     for (; i < n; i++) {
@@ -500,9 +508,14 @@ class Scanner {
         this.content(ctx);
         this.push("brace");
       } else if (c === "}") {
-        this.popTo((e) => e.kind === "brace");
+        const top = this.stack[this.stack.length - 1];
+        this.popTo((e) => e.kind === "brace" || e.kind === "propsBlock");
         if (ctx.depth === null) ctx.depth = this.depth();
         ctx.leading = false;
+        if (top && top.kind === "propsBlock") {
+          this.mode = "html";
+          return i + 1;
+        }
       } else if (c === "(") {
         this.content(ctx);
         this.push("paren");

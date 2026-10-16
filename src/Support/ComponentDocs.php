@@ -96,6 +96,30 @@ final class ComponentDocs
         }
         unset($prop);
 
+        // @props{}: its type/required/default/kind win over a docblock's for the same name, but the docblock's own
+        // description text is kept if @props{} didn't produce one - same precedence as the JS twin (docblock.js's
+        // parseComponent()), so a description can stay hand-written prose even once @props{} is the enforced
+        // source of type/required/default for that prop.
+        foreach (\CastTemplateEngine\Props::scan($source)['props'] as $p) {
+            $type = implode('|', $p['types']) . ($p['nullable'] ? '|null' : '');
+            $idx = $byName[$p['name']] ?? null;
+            $prop = $idx !== null ? $spec['props'][$idx] : self::newProp($p['name']);
+            $oldDescription = $prop['description'];
+            $prop['type'] = $type;
+            $prop['default'] = $p['default'];
+            $prop['required'] = $p['required'];
+            $prop['documented'] = true;
+            self::finish($prop);
+            $prop['required'] = $p['required']; // @props{}'s own rule (no default = required) is explicit, not inferred - finish()'s own heuristic does not apply here
+            if ($oldDescription !== '' && $prop['description'] === '') $prop['description'] = $oldDescription;
+            if ($idx !== null) {
+                $spec['props'][$idx] = $prop;
+            } else {
+                $spec['props'][] = $prop;
+                $byName[$p['name']] = count($spec['props']) - 1;
+            }
+        }
+
         return $spec;
     }
 
@@ -148,7 +172,7 @@ final class ComponentDocs
     }
 
     /** The type at the start of `text`: balanced <>, (), {}, quotes; unions may have spaces around | and &. */
-    private static function readType(string $text): array
+    public static function readType(string $text): array
     {
         $i = 0;
         $depth = 0;
@@ -289,7 +313,7 @@ final class ComponentDocs
     }
 
     /** Fill in what follows from the type and the description: required, kind, allowed values, deprecation. */
-    private static function finish(array &$prop): void
+    public static function finish(array &$prop): void
     {
         $types = self::splitUnion($prop['type']);
         $optionalType = false;
@@ -348,7 +372,7 @@ final class ComponentDocs
         unset($prop['documented']);
     }
 
-    private static function splitUnion(?string $type): array
+    public static function splitUnion(?string $type): array
     {
         if ($type === null || $type === '') {
             return [];

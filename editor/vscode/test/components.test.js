@@ -230,6 +230,90 @@ test("diagnose: a required prop supplied by a <Slot> counts", () => {
   assert.deepEqual(diagnose("<Card2 />", (t) => lookup(t, p.where)).map((x) => x.kind), ["missing"]);
 });
 
+test("diagnose: a name declared in @props{} that still also has a legacy $name ??= line for itself is flagged as a real error - the compiler rejects it outright", () => {
+  const d = diagnose("<?php ?>\n@props{ string $x = 'a'; }\n<?php $x ??= 'b'; ?>\n<div><?= $x ?></div>", () => null);
+  assert.deepEqual(d.map((x) => [x.kind, x.severity]), [["props-legacy-conflict", "error"]]);
+  assert.match(d[0].message, /"\$x" is declared in @props\{\}.*legacy "\$x \?\?= \.\.\." convention/);
+});
+
+test("diagnose: @props{} with no legacy ??= for any of its names is clean", () => {
+  const d = diagnose("<?php ?>\n@props{ string $x = 'a'; string $y = 'b'; }\n<div></div>", () => null);
+  assert.deepEqual(d.filter((x) => x.kind === "props-legacy-conflict"), []);
+});
+
+test("a component declared entirely with @props{} is indistinguishable from a docblock-declared one to lookup()/findProp()/diagnose() - every existing consumer needs no changes", () => {
+  const p = project({
+    "resources/views/components/typed.cast.php": `<?php
+declare(strict_types=1);
+?>
+@props{
+string $title;
+string $variant = 'primary';
+};
+<div></div>`,
+  });
+  const found = lookup("Typed", p.where);
+  assert.ok(found, "resolved like any other component");
+  assert.deepEqual(found.spec.props.map((pr) => pr.name), ["title", "variant"]);
+  assert.equal(findProp(found.spec, "title").required, true);
+  assert.equal(findProp(found.spec, "variant").default, "'primary'");
+
+  const run = (src) => diagnose(src, (t) => lookup(t, p.where));
+  assert.deepEqual(run("<Typed />").map((x) => x.kind), ["missing"], "same required-prop diagnostic as a docblock component");
+  assert.deepEqual(run('<Typed title="t" nope="x" />').map((x) => x.kind), ["unknown"], "same unknown-prop diagnostic");
+  assert.deepEqual(run('<Typed title="t" />'), [], "clean once the required prop is given");
+});
+
+test("@props extends::Path{}: lookup() merges the base component's own props underneath this one's (base first, then overrides/additions)", () => {
+  const p = project({
+    "resources/views/components/btns/btn.cast.php": `<?php
+declare(strict_types=1);
+?>
+@props{
+string $color = 'primary';
+string $label;
+};
+<button></button>`,
+    "resources/views/components/btns/btn-soft.cast.php": `<?php
+declare(strict_types=1);
+?>
+@props extends::Btns.Btn{
+string $margin = 'mx-1';
+};
+<span></span>`,
+  });
+  const found = lookup("Btns.BtnSoft", p.where);
+  assert.ok(found, "resolved like any other component");
+  assert.deepEqual(found.spec.props.map((pr) => pr.name), ["color", "label", "margin"], "base's props first, in its own order, then the extending file's own new one");
+  assert.equal(findProp(found.spec, "label").required, true, "inherited required prop stays required");
+  assert.equal(findProp(found.spec, "color").default, "'primary'", "inherited default is kept");
+  assert.equal(findProp(found.spec, "margin").default, "'mx-1'");
+
+  const run = (src) => diagnose(src, (t) => lookup(t, p.where));
+  assert.deepEqual(run("<Btns.BtnSoft />").map((x) => x.kind), ["missing"], "the inherited required prop (label) is still enforced");
+  assert.deepEqual(run('<Btns.BtnSoft label="x" />'), [], "clean once the inherited required prop is given");
+});
+
+test("@props extends::Path{} with a missing base or a circular chain degrades to this file's own props, not a crash (the editor is informational, not enforcing - the compiler is what rejects these)", () => {
+  const p = project({
+    "resources/views/components/orphan.cast.php": `<?php ?>
+@props extends::NoSuchBase{
+string $x;
+};
+<div></div>`,
+    "resources/views/components/circ-a.cast.php": "<?php ?>\n@props extends::CircB{\nstring $a;\n};\n<div></div>",
+    "resources/views/components/circ-b.cast.php": "<?php ?>\n@props extends::CircA{\nstring $b;\n};\n<div></div>",
+  });
+  const orphan = lookup("Orphan", p.where);
+  assert.deepEqual(orphan.spec.props.map((pr) => pr.name), ["x"], "missing base: keeps its own declared props");
+
+  // a circular chain is doomed to fail loudly at compile time regardless (Compiler::mergeExtendedProps() throws);
+  // the editor side only has to not hang/crash and keep showing the file's own declared prop, not reproduce the
+  // compiler's exact rejection point - which of the two files in the cycle "wins" the other's prop is incidental.
+  const circA = lookup("CircA", p.where);
+  assert.ok(circA.spec.props.some((pr) => pr.name === "a"), "circular chain: no infinite loop, and its own prop is still there");
+});
+
 test("nearest: edit distance and spelling variants", () => {
   assert.equal(nearest("titel", ["title", "label"]), "title");
   assert.equal(nearest("has-label", ["hasLabel"]), "hasLabel");

@@ -5,6 +5,7 @@
 const { scanComponents } = require("./scan");
 const { camel } = require("./docblock");
 const { findProp } = require("./components");
+const { parsePropsBlock } = require("./propsBlock");
 
 /** The component tags (opening ones) whose attributes are being typed: refs from the scanner plus the stack for slots. */
 function openTags(refs) {
@@ -273,6 +274,22 @@ function diagnose(src, lookup) {
       }
     }
   }
+
+  // 5. @props{}: a name declared there that still also has a legacy `$name ??= ...;` line for itself is a real
+  // compile error (CastTemplateEngine\Props::scan() rejects it, since the prelude Compiler.php emits already
+  // assigns that name unconditionally, making the old line silently dead code) - caught here too, so it shows up
+  // as you type instead of only at the next compile.
+  for (const p of parsePropsBlock(src).props) {
+    const re = new RegExp(`\\$${p.name}\\s*\\?\\?=`);
+    const m = re.exec(src);
+    if (m) {
+      problems.push({
+        start: m.index, end: m.index + m[0].length, kind: "props-legacy-conflict", severity: "error",
+        message: `"$${p.name}" is declared in @props{} and also uses the legacy "$${p.name} ??= ..." convention - remove the ??= line, its default now belongs in @props{}`,
+      });
+    }
+  }
+
   return problems;
 }
 
