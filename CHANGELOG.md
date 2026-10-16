@@ -2,6 +2,10 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 2.1.2
+
+- **Fix (Windows)**: the VS Code extension failed to start the language server with `spawn ...\npm\cast-language-server ENOENT`. `where` returns npm's extensionless sh shim first, which Node cannot spawn; the extension now launches the real `dist/server.js` beside the shim with `node`. Non-Windows behaviour is unchanged.
+
 ## 2.1.1
 
 - **Fix (Windows)**: `engine:editor-install` failed with `Cannot find module ...\node_modules\npm\bin\npm-cli.js`. The installer now resolves `npm`/`npx` shims to their absolute `.cmd`/`.exe` path before running them, so language-server and extension dependency installs work.

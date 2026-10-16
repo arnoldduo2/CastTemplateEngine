@@ -795,22 +795,42 @@ async function fixIndentation() {
   await vscode.workspace.applyEdit(edit);
 }
 
-/** Finds the cast-language-server executable: the `cast.languageServer.path` setting, else PATH. */
+/**
+ * Finds how to launch the cast-language-server: the `cast.languageServer.path` setting, else PATH.
+ * Returns `{ command, args }` or null. On Windows, `where` yields npm's extensionless sh shim first,
+ * which Node cannot spawn (ENOENT), so the real `dist/server.js` beside the shim is run with node.
+ */
 function resolveServerCommand() {
   const config = vscode.workspace.getConfiguration("cast");
   const configured = config.get("languageServer.path", "");
-  if (configured && fs.existsSync(configured)) return configured;
+  if (configured && fs.existsSync(configured)) return launchFor(configured);
 
   try {
     const { execSync } = require("node:child_process");
     const isWindows = process.platform === "win32";
     const cmd = isWindows ? "where cast-language-server" : "which cast-language-server";
-    const out = execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] }).trim();
-    const first = out.split("\n")[0].trim();
-    return first && fs.existsSync(first) ? first : null;
+    const out = execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] });
+    const candidates = out.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && fs.existsSync(l));
+    for (const candidate of candidates) {
+      const launch = launchFor(candidate);
+      if (launch.command !== candidate || process.platform !== "win32") return launch;
+    }
+    return candidates.length ? launchFor(candidates[0]) : null;
   } catch {
     return null;
   }
+}
+
+/** Turns a resolved executable/shim path into a spawnable `{ command, args }`. */
+function launchFor(file) {
+  const args = ["--stdio"];
+  if (/\.js$/i.test(file)) return { command: "node", args: [file, ...args] };
+  if (process.platform === "win32") {
+    const dir = path.dirname(file);
+    const serverJs = path.join(dir, "node_modules", "cast-language-server", "dist", "server.js");
+    if (fs.existsSync(serverJs)) return { command: "node", args: [serverJs, ...args] };
+  }
+  return { command: file, args };
 }
 
 /** Shows an informational message at most once per global-state key, across sessions. */
@@ -841,8 +861,8 @@ function startLanguageClient(context) {
     return;
   }
 
-  const command = resolveServerCommand();
-  if (!command) {
+  const launch = resolveServerCommand();
+  if (!launch) {
     showOnce(
       context,
       "cast.lspServerMissing",
@@ -852,8 +872,8 @@ function startLanguageClient(context) {
   }
 
   const serverOptions = {
-    run: { command, args: ["--stdio"] },
-    debug: { command, args: ["--stdio"] },
+    run: { command: launch.command, args: launch.args },
+    debug: { command: launch.command, args: launch.args },
   };
   const clientOptions = { documentSelector: [SELECTOR] };
 

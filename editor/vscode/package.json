@@ -2,7 +2,7 @@
   "name": "cast-framework",
   "displayName": "CastFramework",
   "description": "Highlighting, navigation and prop-aware completion for CastFramework views (.cast.php): component tags, docblock props and types, Ctrl+click to open a component's file.",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "publisher": "anode",
   "license": "MIT",
   "repository": {
