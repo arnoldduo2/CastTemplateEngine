@@ -21,6 +21,12 @@ final class ProcessRunner
         // can't execute directly; routing through "cmd /c" resolves them (and PATH) the same way
         // a real shell would. Using the array form (not a string) means no manual escaping is
         // needed — each element is passed through as a literal argument.
+        if ($isWindows) {
+            // Resolve bare shim names (npm, npx, ...) to an absolute .cmd/.exe path first. Otherwise
+            // cmd may pick the extensionless bash script or resolve the shim's own directory
+            // (%~dp0) against the working directory, so npm can't find its own node_modules.
+            $command[0] = self::resolveWindowsExecutable($command[0]);
+        }
         $fullCommand = $isWindows ? array_merge(['cmd', '/c'], $command) : $command;
 
         $descriptors = [
@@ -63,6 +69,29 @@ final class ProcessRunner
         $exitCode = proc_close($process);
 
         return new ProcessResult($exitCode, $output);
+    }
+
+    private static function resolveWindowsExecutable(string $binary): string
+    {
+        if (preg_match('/[\\\\\/]/', $binary) === 1 || in_array(strtolower($binary), ['cmd', 'where'], true)) {
+            return $binary;
+        }
+
+        foreach (['.cmd', '.exe', '.bat'] as $suffix) {
+            $lines = [];
+            @exec('where ' . escapeshellarg($binary . $suffix) . ' 2>NUL', $lines, $code);
+            if ($code !== 0) {
+                continue;
+            }
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line !== '' && is_file($line)) {
+                    return $line;
+                }
+            }
+        }
+
+        return $binary;
     }
 
     /**
