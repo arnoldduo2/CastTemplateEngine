@@ -14,7 +14,7 @@ Highlighting and navigation for the views of a [CastFramework](https://github.co
   Hover shows the file and the props the component reads (`$title ??= ...`); for a name with no file it lists the paths it looked for.
 - **The engine's `@` syntax** (`@{ $x }`, `@foreach`, `@forelse`, `@if`, `@switch`, `@php` ... ) is coloured too, with the PHP inside its parentheses.
 - **Indentation**: *Format Document*, *Format Selection* and **Cast: Fix indentation** re-indent a view, and `cast.autoIndent` (on by default) keeps it right while you type (Enter, and lines that become `</div>`, `<?php endif ?>`, `@endif`, `@else`). It understands HTML and component tags (also with attributes over several lines), PHP's `if (...): ... endif` syntax, multi-line `<?php ?>` blocks and the `@` directives together, and changes only leading whitespace; `<script>`, `<style>`, `<pre>`, comments and heredocs are left alone. Choose it as the formatter for `.cast.php` if another PHP formatter asks (*Format Document With...*).
-- **Snippets** (in PHP files): `ccomp`, `ccomp1`, `cslot`, `cprop`, `cfor`, `cif`, `cpage`, `cinc`, `cmod`, and for the `@` syntax `aforeach`, `aforelse`, `aif`, `aifelse`, `afor`, `awhile`, `aswitch`, `aecho`; in JavaScript `cpagejs` (the `Cast.page({ mount, destroy })` lifecycle).
+- **Snippets** (in PHP files): `aprops`, `apropsext`, `ccomp`, `ccomp1`, `cslot`, `cprop`, `cfor`, `cif`, `cpage`, `cinc`, `cmod`, and for the `@` syntax `aforeach`, `aforelse`, `aif`, `aifelse`, `afor`, `awhile`, `aswitch`, `aecho`; in JavaScript `cpagejs` (the `Cast.page({ mount, destroy })` lifecycle).
 
 ## Install
 
@@ -39,9 +39,14 @@ A packaged `.vsix` (`npm run package`) can also be installed with *Extensions: I
 | `cast.autoIndent` | `true` | Keep the indentation right while typing in `.cast.php` files (after Enter; lines that become `</div>`, `<?php endif ?>`, `@endif`, `@else`). |
 | `cast.diagnostics`, `cast.propCase` | `hint`, `camel` | Problems in component tags; how prop names are written when completed. |
 
-## What it does not do (yet)
+## Language Server Protocol & Architecture
 
-No diagnostics (an unknown component is not flagged: it may be registered elsewhere), no prop completion, no rename or find-all-usages. Those need a small language server and are planned.
+Since v2.0.0, CastFramework integrates a dedicated TypeScript Language Server (`cast-language-server`) and standalone Tree-sitter grammar (`tree-sitter-cast`):
+
+- **Strict-Typed `@props` Diagnostics**: Validates `@props { ... }` syntax, prop types, defaults, required parameters, and `extends::` inheritance targets in real time.
+- **Diagnostics & Code Actions**: Sub-millisecond syntax error detection, unclosed or mismatched tags, unbalanced directives, and quick fixes.
+- **Intelligent Autocompletion**: Component tags with automatically expanded prop snippets, slot completions, and typed attribute completions.
+- **Embedded Language Intelligence Bridge**: Injects PHP, CSS, and JS into virtual documents (`cast-embedded:`) allowing full PHP docblocks, type checks, and completions inside echo holes `@{ ... }`, `@css(...)`, and `@script(...)`.
 
 ## Develop
 

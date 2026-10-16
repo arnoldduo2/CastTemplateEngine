@@ -25,10 +25,13 @@ CastTemplateEngine only adds a few things on top: component tags, children, name
 - [Install](#install)
 - [Setup](#setup)
 - [Writing components](#writing-components)
+- [Declaring props with @props](#declaring-props-with-props)
+- [Component Inheritance](#component-inheritance)
 - [Syntax rules](#syntax-rules)
 - [Reactive Scripts & Event Handling](#reactive-scripts--event-handling)
 - [Scoped CSS & Dynamic Variables](#scoped-css--dynamic-variables)
 - [Component Assets & Bundler](#component-assets--bundler)
+- [Language Server & Tree-Sitter](#language-server--tree-sitter)
 - [Escaping](#escaping)
 - [Caching and errors](#caching-and-errors)
 - [Terminal Commands & CLI](#terminal-commands--cli)
@@ -53,7 +56,7 @@ Until the package is listed on Packagist, install it straight from GitHub by add
 ]
 ```
 
-and then run `composer require anode/cast-template-engine:^1.0`.
+and then run `composer require anode/cast-template-engine:^2.0`.
 
 ## Setup
 
@@ -120,6 +123,47 @@ $hasLabel ??= false;
   renders to a string, so you never need a flag to get it "as a variable".
 - **Scope:** each component runs in its own scope. Page variables are not visible inside it unless you
   pass them as props or through `shared`.
+
+## Declaring props with @props
+
+Components can declare strictly-typed props at the top of the file using `@props { ... }`:
+
+```php
+@props {
+    string $title;
+    ?int $count = 0;
+    string|array $items = [];
+    mixed $extra;
+}
+
+<div class="card">
+    <h3>@{ $title }</h3>
+    @if ($count > 0)
+        <span>@{ $count } items</span>
+    @endif
+</div>
+```
+
+- **Strict types:** supported types include `string`, `int`, `float`, `bool`, `array`, `object`, `iterable`, `callable`, `mixed`.
+- **Nullable & Unions:** `?string`, `int|string`, `?array`.
+- **Defaults:** `$name = 'default';`. A prop without a default value is **required**; passing no value or omitting it results in a compile/runtime check.
+- **Placement:** `@props` must appear before any HTML markup in the component file.
+- **Terminator:** every entry ends with a semicolon `;`. Single-line `//` comments are permitted inside the block.
+
+## Component Inheritance
+
+Components can inherit and extend props from another component using `@props extends::...`:
+
+```php
+@props extends::Components.Cards.BaseCard {
+    string $subtitle;
+    bool $featured = false;
+}
+```
+
+- The child component automatically receives all props defined in the base component.
+- The child can override defaults or define additional props.
+- Circular inheritance chains are detected and prevented at compile time.
 
 ## Syntax rules
 
@@ -456,12 +500,24 @@ The bundler:
    /* cast:components:end */
    ```
 
+## Language Server & Tree-Sitter
+
+CastTemplateEngine provides a dedicated Language Server Protocol (LSP) and Tree-sitter grammar:
+
+- **`cast-language-server` (`editor/server/`):** Full TypeScript LSP server providing diagnostics, tag completions, prop hints, Go to Definition, formatting, and quick fixes.
+- **`tree-sitter-cast` (`editor/tree-sitter-cast/`):** Standalone grammar with highlight, injection (PHP/CSS/JS), fold, and indent queries for Neovim (`nvim-treesitter`), Zed, Helix, and VS Code.
+- **Specification (`editor/spec/cast-syntax.json`):** Machine-readable syntax specification dynamically generated from the engine's reflection metadata (`php bin/gen-syntax-spec.php`).
+- **PHP Intelligence Bridge:** Injects PHP code inside echo holes `@{ ... }` and directives, mapping character positions to bundled Phpactor/PHP LSPs via bidirectional source maps.
+
 ## Terminal Commands & CLI
 
 CastTemplateEngine includes a zero-dependency CLI runner:
 
 ```bash
 php cast engine:check              # Scan and lint all .cast.php files for syntax errors & missing keys
+php cast lint                      # Authoritative compiler check on all template files
+php cast lint <file> --json        # Machine-readable JSON diagnostics for IDEs and AI coding agents
+php cast engine:ast <file>         # Inspect AST, declared @props, components, and scoped CSS
 php cast engine:compile            # Precompile all templates into the cache folder
 php cast engine:build              # Minify & bundle component assets into app.css and app.js
 php cast engine:clear              # Clear compiled template cache
@@ -470,7 +526,7 @@ php cast engine:editor --editor=antigravity-ide # Install specifically for Antig
 php cast engine:editor --editor=code            # Install specifically for VS Code
 ```
 
-Commands can also be called with space syntax (`php cast engine check`) and can be extended by CastFramework via `CastTemplateEngine\Console\CommandRegistry::register(...)`.
+Commands can also be called with space syntax (`php cast engine check`, `php cast ast <file>`) and can be extended by CastFramework via `CastTemplateEngine\Console\CommandRegistry::register(...)`.
 
 ## Documentation Snippets List
 
@@ -478,6 +534,8 @@ The following snippet triggers are available in the editor:
 
 | Prefix | Description | Expansion |
 |---|---|---|
+| `aprops` | Strictly-Typed Component Props | `@props { string $title; ?int $count = 0; }` |
+| `apropsext` | Component Prop Inheritance | `@props extends::Components.BaseCard { ... }` |
 | `ccomp` | Component with children | `<Card title="Header">$0</Card>` |
 | `ccomp1` | Self-closing component | `<Btns.Soft label="Save" />` |
 | `cslot` | Named Slot | `<Slot name="left">$0</Slot>` |

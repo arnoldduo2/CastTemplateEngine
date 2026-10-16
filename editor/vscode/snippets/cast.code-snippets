@@ -270,5 +270,24 @@
       "});"
     ],
     "description": "handleEvent delegated event listener"
+  },
+  "Cast @props": {
+    "prefix": "aprops",
+    "body": [
+      "@props {",
+      "\t${1:string} \\$${2:title};",
+      "\t${3:?int} \\$${4:count} = ${5:0};$0",
+      "}"
+    ],
+    "description": "@props { ... } strictly-typed component props"
+  },
+  "Cast @props extends": {
+    "prefix": "apropsext",
+    "body": [
+      "@props extends::${1:Components.BaseCard} {",
+      "\t${2:string} \\$${3:subtitle};$0",
+      "}"
+    ],
+    "description": "@props extends::... component prop inheritance"
   }
 }

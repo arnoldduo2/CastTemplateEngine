@@ -2,7 +2,31 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
-## 1.7.0
+## 2.0.0
+
+- **Dedicated Cast Language Server (`cast-language-server`, TypeScript)**:
+  - High-performance, out-of-process Language Server Protocol (LSP) implementation in `editor/server/`.
+  - In-process AST parser (`CastParser`) providing sub-millisecond diagnostics for syntax, unclosed/mismatched tags, and unbalanced directives.
+  - Unified project indexer (`ProjectIndex`) indexing user views, components, and framework-owned views (`starter/`, demo views, error pages), with priority user overrides and `extends::` inheritance resolution.
+  - Contextual completions for directives, component tags with auto-filled required prop snippets, slot tags, attributes with typed defaults, and `extends::` paths.
+  - Rich hover documentation for components, prop types/defaults, slot tags, and directives.
+  - Go to Definition for components, slots, and `extends::` inheritance targets.
+  - Document formatting and on-type indentation rules.
+  - Virtual PHP document generator and bidirectional character-accurate source mapping (`SourceMap`, `VirtualPhpBuilder`) with Phpactor integration and missing runtime detection.
+- **Standalone `tree-sitter-cast` Grammar**:
+  - Independent Tree-sitter grammar in `editor/tree-sitter-cast/` with 100% test corpus pass.
+  - Standard queries for syntax highlights (`highlights.scm`), embedded language injections (`injections.scm`), code folding (`folds.scm`), and indentation (`indents.scm`).
+  - Supports modern editors and tools including VS Code, Antigravity IDE, Neovim (`nvim-treesitter`), Zed, and Helix.
+- **Strict-Typed `@props` Directive & Component Inheritance**:
+  - New syntax: `@props { type $name [ = default ]; }` and `@props extends::Components.BaseCard { ... }`.
+  - Semicolon-terminated entries with cycle detection on inheritance chains.
+  - Compile-time type checking with supported types: `string`, `int`, `float`, `bool`, `array`, `object`, `iterable`, `callable`, `mixed`, nullable `?Type`, and union `TypeA|TypeB`.
+  - Enforced placement before any HTML markup in component views.
+- **CLI AST Tooling & AI Agent Specification**:
+  - `php cast lint <file> --json` (and `engine:check --json`): Outputs structured JSON diagnostics for LSP and AI agent automation.
+  - `php cast engine:ast <file>` (alias `ast`): Machine-readable AST inspection displaying declared props, component invocations, echo holes, and scoped CSS classes.
+  - `bin/gen-syntax-spec.php` & `editor/spec/cast-syntax.json`: Reflection-driven machine-readable syntax specification with automated drift tests.
+
 
 - **VS Code Extension Language Intelligence & Virtual Documents Bridge**:
   - Bridged `@css(...)`, `@script(...)`, `@js(...)`, and `@{ ... }` echo holes to VS Code's native PHP, JS, and CSS language providers via virtual documents (`cast-embedded:` URI scheme).

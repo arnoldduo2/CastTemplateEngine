@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.0
+
+- **Dedicated Language Server Integration**:
+  - Integrated with `cast-language-server` TypeScript LSP server in `editor/server/`.
+  - Comprehensive AST parsing with sub-millisecond diagnostics for unclosed tags, directive mismatches, and syntax errors.
+  - Real-time `@props { ... }` validation and `extends::` inheritance resolution.
+  - Contextual autocompletion with required props auto-expansion, slot completions, and typed attribute completions.
+  - Go to Definition for components, slots, and `extends::` inheritance targets.
+  - Hover documentation for components, prop types/defaults, slot tags, and directives.
+  - Added `aprops` and `apropsext` snippets.
+- **Tree-sitter Grammar Integration**:
+  - Standalone `tree-sitter-cast` grammar supporting modern syntax trees and queries.
+
 ## 1.7.0
 
 - **Embedded Language Intelligence Bridge**:
