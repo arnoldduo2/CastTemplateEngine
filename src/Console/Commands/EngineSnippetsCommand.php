@@ -36,7 +36,7 @@ final class EngineSnippetsCommand implements CommandInterface
             ['amapobj', 'Object Map Shorthand', '@$items.map(($item, $i) => return(<Card key={$i}>...</Card>))'],
             ['afilter', 'Filter Collection', '@filter($items, ($item) => $item["qty"] > 0)'],
             ['achain', 'Chained Filter and Map', '@$items.filter(($item) => condition).map(($item, $i) => return(...))'],
-            ['acast', 'Conditional Inline Render', '@{ $cond ? @cast(<p>Yes</p>) : @cast(<p>No</p>) }'],
+            ['arender', 'Conditional Inline Render', '@{ $cond ? @render(<p>Yes</p>) : @render(<p>No</p>) }'],
             ['aforeach', 'Foreach Loop', '@foreach ($items as $item) ... @endforeach'],
             ['aforelse', 'Forelse with Empty', '@forelse ($items as $item) ... @empty ... @endforelse'],
             ['aif', 'If Condition', '@if ($condition) ... @endif'],

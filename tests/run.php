@@ -512,7 +512,7 @@ test('@filter standalone and chained with @map', function () {
     );
 });
 
-test('inline return(...) and @cast(...) inside @{ }', function () {
+test('inline return(...) and @render(...) inside @{ }', function () {
     $items = [
         ['id' => 10, 'name' => 'Good'],
         ['id' => -1, 'name' => 'Bad'],
@@ -529,10 +529,10 @@ test('inline return(...) and @cast(...) inside @{ }', function () {
         page($tpl, ['items' => $items])
     );
 
-    // Testing @cast shorthand
-    $tplCast = "@{ \$val ? @cast(<em>Yes</em>) : @cast(<em>No</em>) }";
-    same('<em>Yes</em>', page($tplCast, ['val' => true]));
-    same('<em>No</em>', page($tplCast, ['val' => false]));
+    // Testing @render shorthand (an alias for return(...); @cast is a separate FUNCTION_DIRECTIVES whitelist entry now)
+    $tplRender = "@{ \$val ? @render(<em>Yes</em>) : @render(<em>No</em>) }";
+    same('<em>Yes</em>', page($tplRender, ['val' => true]));
+    same('<em>No</em>', page($tplRender, ['val' => false]));
 });
 
 test('data-el-key automatic fallback when key is omitted', function () {

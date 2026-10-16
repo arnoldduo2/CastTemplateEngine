@@ -170,6 +170,41 @@ test("a directive's parentheses are bold/colored the same as its keyword (Blade-
   assert.ok(has(find(script, "("), "keyword.control.directive.cast"), "@script's opening paren");
 });
 
+test("@css/@js/@scripts/@styles/@map/@filter (and the fluent .filter()/.map() chain) carry a dedicated styled scope, distinct from plain control-flow directives like @if, so a theme can give them their own bold/italic/underline/accent-colored-brackets treatment without affecting @if/@foreach/@switch", { skip }, async () => {
+  const styledWord = "keyword.control.directive.styled.cast";
+  const scopeOpen = "punctuation.section.directive.scope.begin.cast";
+  const scopeClose = "punctuation.section.directive.scope.end.cast";
+
+  const css = await tokenize("@css(\n.a { color: red; }\n)");
+  assert.ok(has(find(css, "css"), styledWord));
+  assert.ok(has(find(css, "("), scopeOpen));
+  assert.ok(has(find(css, ")"), scopeClose));
+
+  const script = await tokenize("@script(\nconsole.log(1);\n)");
+  assert.ok(has(find(script, "script"), styledWord));
+  assert.ok(has(find(script, "("), scopeOpen));
+
+  const map = await tokenize("@map($items, ($item) => $item)");
+  assert.ok(has(find(map, "map"), styledWord));
+  assert.ok(has(find(map, "("), scopeOpen));
+
+  const filter = await tokenize("@filter($items, ($item) => true)");
+  assert.ok(has(find(filter, "filter"), styledWord));
+
+  assert.ok(has(find(await tokenize("@scripts"), "scripts"), styledWord), "@scripts (bare, no parens) still gets the styled word scope");
+  assert.ok(has(find(await tokenize("@styles"), "styles"), styledWord));
+
+  const chain = await tokenize("@$items.filter(($i) => $i->active).map(($i) => $i->name)");
+  assert.ok(has(find(chain, "filter"), styledWord), "the fluent chain's .filter( gets the same styled scope");
+  assert.ok(has(find(chain, "map"), styledWord), "...and its .map(");
+  assert.equal(find(chain, "(").filter((s) => has([s], scopeOpen)).length, 2, "both segments' own opening parens are accented");
+
+  const ifTok = await tokenize("@if ($x) y @endif");
+  assert.ok(!has(find(ifTok, "if"), styledWord), "@if is a plain control-flow directive, not part of this styled set");
+  assert.ok(!has(find(ifTok, "("), scopeOpen), "@if's own parens are not accented either");
+  assert.ok(has(find(ifTok, "if"), "keyword.control.directive.cast"), "but @if still keeps its original scope, unaffected");
+});
+
 test("@map and expressions support HTML tags and @{ } echo inside callbacks", { skip }, async () => {
   const t = await tokenize(`@map($items, ($item, $i) => (
   <li class="list-group-item">

@@ -210,6 +210,20 @@ test("diagnose: unknown prop (with a suggestion), missing required, value outsid
   assert.deepEqual(run('<Btns.Button title="t" block />'), [], "bare bool prop");
 });
 
+test("diagnose: whitelisted framework-helper directives (@htchars, @route, @cast, @csrf, @alerts, @modules) are not flagged as unknown", () => {
+  const d = diagnose(
+    '<meta content=@htchars($x)><a href=@route("/")>x</a>@cast($g)@csrf@alerts@modules("app")',
+    () => null,
+  );
+  assert.deepEqual(d.filter((x) => x.kind === "unknown-directive"), [], "none of the whitelisted directives are flagged");
+});
+
+test("diagnose: an actual unknown directive (not in the whitelist) is still flagged", () => {
+  const d = diagnose("@fitler($items, ($item) => true)", () => null);
+  assert.deepEqual(d.map((x) => x.kind), ["unknown-directive"], "a typo still fails loudly, same safety as before");
+  assert.match(d[0].message, /Unknown directive "@fitler"/);
+});
+
 test("diagnose: a required prop supplied by a <Slot> counts", () => {
   const p = project({ "resources/views/components/card2.cast.php": "<?php\n/** @var string $header Head */\n" });
   assert.deepEqual(diagnose('<Card2><Slot name="header">H</Slot></Card2>', (t) => lookup(t, p.where)), []);

@@ -101,7 +101,9 @@ function diagnose(src, lookup) {
     "for", "foreach", "forelse", "while", "if", "elseif", "else", "endif", "endfor", "endforeach",
     "endwhile", "endforelse", "unless", "endunless", "isset", "endisset", "switch", "case", "default",
     "endswitch", "php", "endphp", "break", "continue", "empty", "map", "filter",
-    "script", "js", "css", "scripts", "styles"
+    "script", "js", "css", "scripts", "styles",
+    // framework-helper directives - keep this in sync with Directives::FUNCTION_DIRECTIVES (vendor/anode/cast-template-engine/src/Directives.php)
+    "htchars", "route", "cast", "csrf", "alerts", "modules",
   ]);
   const CSS_RULES = new Set([
     "media", "import", "keyframes", "charset", "font-face", "supports", "page", "namespace",
@@ -140,6 +142,43 @@ function diagnose(src, lookup) {
       }
     }
   }
+
+  // 1b. Style consistency: mixing <?= ?> and @{ } for plain output across sibling leaf tags (e.g. a run of <td>
+  // cells) is confusing - not wrong, both compile the same way, but a reader has to wonder why one differs.
+  // Flagged only within a contiguous run of simple `<tag>ECHO</tag>` siblings (nothing but whitespace between one's
+  // closing tag and the next's opening tag): unrelated uses elsewhere in the file are never flagged.
+  const leafEcho = /<([A-Za-z][\w-]*)>\s*(?:(<\?=\s*[^?]*?\s*\?>)|(@\{[^{}]*\}))\s*<\/\1>/g;
+  let lm;
+  let run = [];
+  const flushRun = () => {
+    if (run.length < 2) {
+      run = [];
+      return;
+    }
+    const styles = new Set(run.map((r) => r.style));
+    if (styles.size > 1) {
+      const majority = run.filter((r) => r.style === "<?= ?>").length >= run.filter((r) => r.style === "@{ }").length ? "<?= ?>" : "@{ }";
+      for (const r of run) {
+        if (r.style !== majority) {
+          problems.push({
+            start: r.start, end: r.end, kind: "mixed-echo-style", severity: "hint",
+            message: `Mixes "${r.style}" with "${majority}" used on the sibling tags right around it - pick one style for a run like this`,
+          });
+        }
+      }
+    }
+    run = [];
+  };
+  let lastEnd = null;
+  while ((lm = leafEcho.exec(src)) !== null) {
+    const style = lm[2] ? "<?= ?>" : "@{ }";
+    const exprStart = lm.index + lm[0].indexOf(lm[2] || lm[3]);
+    const entry = { start: exprStart, end: exprStart + (lm[2] || lm[3]).length, style };
+    if (lastEnd !== null && src.slice(lastEnd, lm.index).trim() !== "") flushRun();
+    run.push(entry);
+    lastEnd = lm.index + lm[0].length;
+  }
+  flushRun();
 
   // 2. Tag Matching
   const tagStack = [];

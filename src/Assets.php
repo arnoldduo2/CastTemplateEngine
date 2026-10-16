@@ -21,11 +21,34 @@ final class Assets
     /** @var array<string, bool> */
     private static array $componentJsFiles = [];
 
+    /**
+     * A stack of frames, one per component currently rendering (innermost last): each frame collects the
+     * @css() ids *that component's own body* registers, so CastTemplate::component() can scope exactly those
+     * ids to that component's root element without also picking up a nested child's own ids.
+     * @var list<list<string>>
+     */
+    private static array $scopeStack = [];
+
     public static function addStyle(string $id, string $css): void
     {
         if (!isset(self::$styles[$id])) {
             self::$styles[$id] = $css;
         }
+        if (self::$scopeStack) {
+            self::$scopeStack[array_key_last(self::$scopeStack)][] = $id;
+        }
+    }
+
+    /** Starts collecting the @css() ids the component about to render registers; pair with popScope(). */
+    public static function pushScope(): void
+    {
+        self::$scopeStack[] = [];
+    }
+
+    /** Ends collection and returns the ids registered since the matching pushScope() (not a nested child's). @return list<string> */
+    public static function popScope(): array
+    {
+        return array_pop(self::$scopeStack) ?? [];
     }
 
     public static function addScript(string $id, string $js): void
@@ -133,5 +156,6 @@ final class Assets
         self::$scripts = [];
         self::$componentCssFiles = [];
         self::$componentJsFiles = [];
+        self::$scopeStack = [];
     }
 }

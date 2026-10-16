@@ -2,6 +2,28 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 1.7.0
+
+- **VS Code Extension Language Intelligence & Virtual Documents Bridge**:
+  - Bridged `@css(...)`, `@script(...)`, `@js(...)`, and `@{ ... }` echo holes to VS Code's native PHP, JS, and CSS language providers via virtual documents (`cast-embedded:` URI scheme).
+  - Parameter-name inlay hints (`EmbeddedInlayHints`) for functional directives (`@route(...)`, `@htchars(...)`, etc.), matching native PHP function calls.
+  - Hover documentation (`FunctionDirectiveHovers` & `EmbeddedHovers`) bridging directly to real PHP docblocks and function signatures.
+  - Go to Definition (`EmbeddedDefinitions`): Ctrl+click / F12 now resolves variables and symbols inside `@{ }` echo holes, including loop/callback variables in `@map`/`@filter`/`@foreach`.
+  - Completions (`EmbeddedCompletions`) for CSS properties, JS APIs, and PHP expressions inside directive bodies and echo holes.
+  - Dedicated TextMate scope `keyword.control.directive.styled.cast` with configuration defaults for styled directives and bracket punctuation coloring.
+  - Added `arender` snippet alias for `@render(...)`.
+  - Indentation engine re-indents doc comments (`/** ... */`) correctly within `@script(...)` and `@css(...)` blocks.
+- **Scoped CSS & Component Root Class Injection**:
+  - `Css::scanClassRenames()` and `Compiler`: Component `@css(...)` declarations scan class selectors and uniquely scope matching class names in template markup.
+  - `Css::injectScope()` and `Assets::pushScope()` / `popScope()`: Component rendered root elements automatically receive their scoped `cast-<id>` class, ensuring component scoped CSS reliably targets rendered markup.
+  - Pure class selector optimization: Flattened scoped selectors with fallback to ancestor scoping for dynamically assembled classes.
+- **Engine Compiler & Runtime Improvements**:
+  - Directives: Supported `@render(...)` as the standard inline markup render helper (aliasing `return(...)`), with accurate line number mapping across nested callbacks.
+  - Short-echo tags in bare HTML attributes: Safely quotes short-echo PHP tags in bare attributes (e.g. `attr=@route(...)`) to prevent space-splitting and preserve HTML tag integrity. Added validation for missing `{` in braced attributes.
+  - Windows file locking & cache resilience: Atomic temporary cache file replacement with retry loop and fallback on Windows systems where file locking (`rename()`) can be transiently held by concurrent `include()` calls. Second-granularity cache mtime check (`<=`).
+  - Runtime event delegation (`assets/cast.js`): Safely merges `Cast` onto existing `window.Cast` instances without overwriting host SPA runtime APIs.
+  - `TemplateError`: Captures and exposes `$file` and `$line` properties directly.
+
 ## 1.6.0
 
 - **Editor hover for functional directives**: `@map(...)`, `@filter(...)`, the inline-render transform (`return(...)`/`@cast(...)`), the `@{ ... }` echo hole, and every segment of a fluent collection chain (`@$items.filter(...).map(...)`) now show hover documentation explaining accepted parameters and behavior.

@@ -17,6 +17,12 @@
       "include": "#directive-js"
     },
     {
+      "include": "#directive-chain"
+    },
+    {
+      "include": "#directive-styled"
+    },
+    {
       "include": "#directive"
     },
     {
@@ -232,6 +238,12 @@
           "include": "#directive-echo"
         },
         {
+          "include": "#directive-chain"
+        },
+        {
+          "include": "#fluent-chain-styled"
+        },
+        {
           "include": "#component-close"
         },
         {
@@ -338,18 +350,18 @@
       "name": "meta.directive.css.cast",
       "beginCaptures": {
         "1": {
-          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast keyword.control.directive.styled.cast"
         },
         "2": {
-          "name": "keyword.control.directive.cast"
+          "name": "keyword.control.directive.cast keyword.control.directive.styled.cast"
         },
         "3": {
-          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast"
+          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast punctuation.section.directive.scope.begin.cast"
         }
       },
       "endCaptures": {
         "1": {
-          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast"
+          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast punctuation.section.directive.scope.end.cast"
         }
       },
       "patterns": [
@@ -391,18 +403,18 @@
       "name": "meta.directive.js.cast",
       "beginCaptures": {
         "1": {
-          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast keyword.control.directive.styled.cast"
         },
         "2": {
-          "name": "keyword.control.directive.cast"
+          "name": "keyword.control.directive.cast keyword.control.directive.styled.cast"
         },
         "3": {
-          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast"
+          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast punctuation.section.directive.scope.begin.cast"
         }
       },
       "endCaptures": {
         "1": {
-          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast"
+          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast punctuation.section.directive.scope.end.cast"
         }
       },
       "patterns": [
@@ -439,7 +451,7 @@
       ]
     },
     "directive": {
-      "begin": "(?<![\\w.@])(@)(for|foreach|forelse|while|if|elseif|unless|isset|switch|case|php|break|continue|else|empty|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|default|map|filter|scripts|styles)\\b",
+      "begin": "(?<![\\w.@])(@)(for|foreach|forelse|while|if|elseif|unless|isset|switch|case|php|break|continue|else|empty|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|default)\\b",
       "end": "(?<=\\))(?:[ \\t]*(:))?|(?![ \\t(])",
       "name": "meta.directive.cast",
       "beginCaptures": {
@@ -476,6 +488,100 @@
         }
       },
       "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "include": "#paren-group"
+        },
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "directive-styled": {
+      "begin": "(?<![\\w.@])(@)(map|filter|scripts|styles)\\b",
+      "end": "(?<=\\))(?:[ \\t]*(:))?|(?![ \\t(])",
+      "name": "meta.directive.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast keyword.control.directive.styled.cast"
+        },
+        "2": {
+          "name": "keyword.control.directive.cast keyword.control.directive.styled.cast"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.separator.directive.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#directive-arguments-styled"
+        }
+      ]
+    },
+    "directive-arguments-styled": {
+      "begin": "\\(",
+      "end": "\\)",
+      "name": "meta.directive.arguments.cast",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast punctuation.section.directive.scope.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast punctuation.section.directive.scope.end.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "include": "#paren-group"
+        },
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "directive-chain": {
+      "begin": "(?<![\\w.@])(@)(\\$?[A-Za-z_][A-Za-z0-9_]*)(?=\\s*\\.\\s*(?:filter|map)\\b)",
+      "end": "(?<=\\))(?!\\s*\\.\\s*(?:filter|map)\\b)",
+      "name": "meta.directive.chain.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+        },
+        "2": {
+          "name": "variable.other.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#fluent-chain-styled"
+        }
+      ]
+    },
+    "fluent-chain-styled": {
+      "begin": "(\\.)\\s*(filter|map)\\b\\s*(\\()",
+      "end": "(\\))",
+      "name": "meta.directive.fluent.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.accessor.cast"
+        },
+        "2": {
+          "name": "entity.name.function.cast keyword.control.directive.styled.cast"
+        },
+        "3": {
+          "name": "punctuation.section.directive.scope.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.directive.scope.end.cast"
+        }
+      },
       "patterns": [
         {
           "include": "#paren-group"

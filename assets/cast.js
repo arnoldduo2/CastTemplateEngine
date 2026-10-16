@@ -106,7 +106,12 @@
     Cast.on(event, selector, handler);
   };
 
-  root.Cast = Cast;
+  // merge onto an existing window.Cast rather than replace it: this runtime is re-emitted inline by @scripts on
+  // every page (and, for the SPA client, on every in-app navigation too - see Assets::getScripts()/renderScripts()
+  // and cast.module.js's own injectComponentScript()), *after* cast.module.js has already set window.Cast to its
+  // own {load, http, page, configure, ...} API - overwriting it here would silently delete that API the moment
+  // this runtime next runs (confirmed live: window.Cast.load stops existing right after @scripts' output executes)
+  root.Cast = root.Cast ? Object.assign(root.Cast, Cast) : Cast;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () { Cast.triggerLoad(document); });

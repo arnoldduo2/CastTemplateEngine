@@ -31,6 +31,23 @@ final class Directives
     private const WORD = '(forelse|foreach|elseif|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|switch|unless|isset|default|empty|else|case|for|while|if|php|break|continue|map|filter|scripts|styles|script|js|css)';
     private const CSS_RULES = '(media|import|keyframes|charset|font-face|supports|page|namespace|layer|container|property|scope|starting-style|view-transition)';
 
+    /**
+     * Framework-level helper functions usable as bare `@name(...)`/`@name` directives (e.g. `@htchars(...)`,
+     * `@route(...)`, `@alerts`, `@csrf`), compiled as an echoed call to the mapped function - `@name(args)`
+     * becomes `<?= fn(args) ?>`, `@name` with no `(` becomes `<?= fn() ?>`. A curated whitelist, not a blanket
+     * "any unknown @word(...) is a function call" fallback: an actual typo (e.g. `@fitler(...)`) still fails
+     * loudly at compile time with "Unknown directive", the same safety @map/@filter/etc. already have. Add an
+     * entry here to make another framework helper usable this way.
+     */
+    private const FUNCTION_DIRECTIVES = [
+        'htchars' => 'htchars',
+        'route' => 'route',
+        'cast' => '__cast',
+        'csrf' => '__csrf',
+        'alerts' => '__getAlerts',
+        'modules' => '__modules',
+    ];
+
     private string $src = '';
     private int $len = 0;
     private int $pos = 0;
@@ -41,7 +58,14 @@ final class Directives
     /** @var list<array{string, int, int, bool}> open blocks: [directive, line, id, seen @empty] */
     private array $stack = [];
 
-    public function __construct(private string $file = 'template') {}
+    /**
+     * @param array<string, string> $classRenames original class name => scoped name, see Css::scanClassRenames()
+     * @param int $lineOffset for a Directives instance compiling an EXTRACTED substring (a @map/@filter callback's
+     *   body, or a return(...)/@render(...) inline-render's markup) rather than a whole file: the line, minus 1,
+     *   where that substring starts in the real file - so errors inside it report the real line, not a line
+     *   number counted from the start of the substring.
+     */
+    public function __construct(private string $file = 'template', private array $classRenames = [], private int $lineOffset = 0) {}
 
     public function compile(string $source): string
     {
@@ -59,6 +83,24 @@ final class Directives
             $this->fail("@$name is never closed", $line);
         }
         return $out;
+    }
+
+    /** The real-file line (accounting for $lineOffset) at a position in $this->src. */
+    private function lineAt(int $pos): int
+    {
+        return $this->lineOffset + substr_count($this->src, "\n", 0, $pos) + 1;
+    }
+
+    /**
+     * The real-file line where $needle - an exact substring of $haystack - starts, given that $haystack itself
+     * starts at $baseLine. Used to find where a piece extracted from a larger piece of text (a callback's body
+     * within its full argument list, a return(...)'s markup within its surrounding code) really begins, without
+     * having to thread exact byte offsets through every intermediate trim()/regex extraction.
+     */
+    private function lineOfOffset(string $haystack, string $needle, int $baseLine): int
+    {
+        $pos = strpos($haystack, $needle);
+        return $pos === false ? $baseLine : $baseLine + substr_count($haystack, "\n", 0, $pos);
     }
 
     /** Converts from $this->pos up to the end (or the end of the <style> block when $until is set). */
@@ -109,7 +151,7 @@ final class Directives
             $code = $this->balanced($p + 1, '{', '}');
             $this->pos = $p + 1 + strlen($code) + 2;
             $this->lastEnd = $this->pos;
-            return $this->echo(trim($code));
+            return $this->echo($code, $this->lineAt($p + 1));
         }
 
         $before = $p > 0 ? $this->src[$p - 1] : '';
@@ -124,7 +166,7 @@ final class Directives
             return '@';
         }
 
-        $line = substr_count($this->src, "\n", 0, $p) + 1;
+        $line = $this->lineAt($p);
 
         // Check for chained collection calls: e.g. @$items.filter(...).map(...) or @items.map(...)
         if (preg_match('/\G@(\$?[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*(filter|map)\b/', $this->src, $m, 0, $p)) {
@@ -132,6 +174,10 @@ final class Directives
         }
 
         if (!$directives || !preg_match('/\G@' . self::WORD . '\b/', $this->src, $m, 0, $p)) {
+            // A whitelisted framework helper, e.g. @htchars(...), @route(...), @alerts, @csrf - see FUNCTION_DIRECTIVES.
+            if (preg_match('/\G@([A-Za-z_][A-Za-z0-9_]*)\b/', $this->src, $fm, 0, $p) && isset(self::FUNCTION_DIRECTIVES[$fm[1]])) {
+                return $this->functionDirective($fm[1], $fm[0], $line);
+            }
             // If it looks like a directive call @foo(...) or an unclosed/unknown @end...
             if (preg_match('/\G@([A-Za-z_][A-Za-z0-9_]*)(?:\s*\(|(?<=@end)[A-Za-z0-9_]+)/', $this->src, $unrecognized, 0, $p)) {
                 $this->fail("Unknown directive \"@{$unrecognized[1]}\"", $line);
@@ -172,7 +218,7 @@ final class Directives
             $method = $m[1];
             $this->pos += strlen($m[0]);
             $argsStr = $this->parenthesised($method, $line);
-            $parsed = $this->transformCallback($argsStr);
+            $parsed = $this->transformCallback($argsStr, $line);
 
             if ($method === 'filter') {
                 $target = "\\CastTemplateEngine\\Collection::filter($target, {$parsed['code']})";
@@ -184,6 +230,16 @@ final class Directives
         $this->optionalColon();
         $this->lastEnd = $this->pos;
         return "<?= $target ?>";
+    }
+
+    /** A whitelisted framework-helper directive (FUNCTION_DIRECTIVES): `@name(args)` or bare `@name` -> `<?= fn(args) ?>`/`<?= fn() ?>`. */
+    private function functionDirective(string $word, string $matched, int $line): string
+    {
+        $this->pos += strlen($matched);
+        $fn = self::FUNCTION_DIRECTIVES[$word];
+        $args = preg_match('/\G\s*\(/', $this->src, $_, 0, $this->pos) ? $this->parenthesised($word, $line) : '';
+        $this->lastEnd = $this->pos;
+        return $this->echo("$fn($args)", $line);
     }
 
     /** `@php ... @endphp`: the code between is copied as it is. */
@@ -264,7 +320,7 @@ final class Directives
                     $this->fail('@map expects at least 2 arguments: @map($collection, ($item, $i) => ...)', $line);
                 }
                 $collection = $args[0];
-                $callback = $this->transformCallback($args[1]);
+                $callback = $this->transformCallback($args[1], $this->lineOfOffset((string) $arg, $args[1], $line));
                 return "<?= \\CastTemplateEngine\\Collection::map($collection, {$callback['code']}) ?>";
             case 'filter':
                 $args = $this->splitArguments((string) $arg);
@@ -272,10 +328,10 @@ final class Directives
                     $this->fail('@filter expects at least 2 arguments: @filter($collection, ($item) => condition)', $line);
                 }
                 $collection = $args[0];
-                $predicate = $this->transformCallback($args[1]);
+                $predicate = $this->transformCallback($args[1], $this->lineOfOffset((string) $arg, $args[1], $line));
 
                 if (count($args) >= 3) {
-                    $render = $this->transformCallback($args[2]);
+                    $render = $this->transformCallback($args[2], $this->lineOfOffset((string) $arg, $args[2], $line));
                     return "<?= \\CastTemplateEngine\\Collection::filter($collection, {$predicate['code']}, {$render['code']}) ?>";
                 }
 
@@ -289,7 +345,7 @@ final class Directives
             case 'css':
                 $compiled = \CastTemplateEngine\Css::compileBody((string) $arg, $this->file, $line);
                 $id = $compiled['id'];
-                $scoped = \CastTemplateEngine\Css::scope($compiled['css'], ".cast-$id");
+                $scoped = \CastTemplateEngine\Css::scope($compiled['css'], ".cast-$id", $this->classRenames);
                 $escapedScoped = var_export($scoped, true);
                 if (empty($compiled['holes'])) {
                     return "<?php \\CastTemplateEngine\\Assets::addStyle('$id', $escapedScoped); ?>";
@@ -311,20 +367,23 @@ final class Directives
     }
 
     /** `<?= code ?>`; a newline right after it is kept (PHP swallows the one after `?>`) without adding a line. */
-    private function echo(string $code): string
+    private function echo(string $rawCode, int $line = 0): string
     {
-        if ($code === '') $this->fail('@{ } has nothing in it');
-        $code = $this->transformInlineRender($code);
+        $code = trim($rawCode);
+        if ($code === '') $this->fail('@{ } has nothing in it', $line);
+        $code = $this->transformInlineRender($code, $rawCode, $line ?: $this->lineAt($this->pos));
         $newline = substr($this->src, $this->pos, 2) === "\r\n" ? 2 : (($this->src[$this->pos] ?? '') === "\n" ? 1 : 0);
         return $newline ? "<?= $code, \"\\n\" ?>" : "<?= $code ?>";
     }
 
     /**
-     * Transforms return(...) or @cast(...) inside an expression into an immediately-evaluated output buffer closure.
+     * Transforms return(...) or @render(...) inside an expression into an immediately-evaluated output buffer closure.
+     * $rawCode/$line locate $code's real position (see lineOfOffset()): $code itself may already have been trimmed
+     * by the caller, which would otherwise throw off a naive "line = $line + newlines before this point" count.
      */
-    private function transformInlineRender(string $code): string
+    private function transformInlineRender(string $code, string $rawCode, int $line): string
     {
-        $pattern = '/(?:return|@cast)\s*\(/';
+        $pattern = '/(?:return|@render)\s*\(/';
         while (preg_match($pattern, $code, $m, PREG_OFFSET_CAPTURE)) {
             $offset = $m[0][1];
             $openParen = $offset + strlen($m[0][0]) - 1;
@@ -356,7 +415,8 @@ final class Directives
             if ($closeParen === -1) break;
 
             $markup = substr($code, $openParen + 1, $closeParen - $openParen - 1);
-            $compiled = (new Directives($this->file))->compile($markup);
+            $markupLine = $this->lineOfOffset($rawCode, $markup, $line);
+            $compiled = (new Directives($this->file, $this->classRenames, $markupLine - 1))->compile($markup);
             $replacement = '((function($__v) { extract($__v); ob_start(); ?>' . $compiled . '<?php return ob_get_clean(); })(get_defined_vars()))';
 
             $code = substr_replace($code, $replacement, (int) $offset, (int) ($closeParen - $offset + 1));
@@ -418,20 +478,24 @@ final class Directives
 
     /**
      * Transforms an arrow or native callback into executable PHP closure code.
+     * $line: the real-file line where $cb (untrimmed) starts - see lineOfOffset() - so errors inside a nested
+     * return(...)/markup body report their real line instead of counting from 1.
      * @return array{type: string, code: string}
      */
-    private function transformCallback(string $cb): array
+    private function transformCallback(string $cb, int $line = 0): array
     {
-        $cb = trim($cb);
+        $trimmedCb = trim($cb);
+        if ($line === 0) $line = $this->lineAt($this->pos);
 
-        if (preg_match('/^(?:(?:\(([^)]*)\)|(\$[A-Za-z0-9_]+)))\s*=>\s*(.*)$/s', $cb, $m)) {
+        if (preg_match('/^(?:(?:\(([^)]*)\)|(\$[A-Za-z0-9_]+)))\s*=>\s*(.*)$/s', $trimmedCb, $m)) {
             $rawParams = trim($m[1] !== '' ? $m[1] : $m[2]);
             $body = trim($m[3]);
             $cleanParams = $this->normalizeParams($rawParams);
 
             if (preg_match('/^return\s*\((.*)\)\s*;?$/s', $body, $bm)) {
                 $markup = $bm[1];
-                $compiled = (new Directives($this->file))->compile($markup);
+                $markupLine = $this->lineOfOffset($cb, $markup, $line);
+                $compiled = (new Directives($this->file, $this->classRenames, $markupLine - 1))->compile($markup);
                 return [
                     'type' => 'render',
                     'code' => "function($cleanParams) { ob_start(); ?>" . $compiled . "<?php return ob_get_clean(); }"
@@ -439,14 +503,16 @@ final class Directives
             }
             if (preg_match('/^\((.*)\)\s*;?$/s', $body, $bm) && preg_match('/^\s*</', $bm[1])) {
                 $markup = $bm[1];
-                $compiled = (new Directives($this->file))->compile($markup);
+                $markupLine = $this->lineOfOffset($cb, $markup, $line);
+                $compiled = (new Directives($this->file, $this->classRenames, $markupLine - 1))->compile($markup);
                 return [
                     'type' => 'render',
                     'code' => "function($cleanParams) { ob_start(); ?>" . $compiled . "<?php return ob_get_clean(); }"
                 ];
             }
             if (str_starts_with($body, '<')) {
-                $compiled = (new Directives($this->file))->compile($body);
+                $markupLine = $this->lineOfOffset($cb, $body, $line);
+                $compiled = (new Directives($this->file, $this->classRenames, $markupLine - 1))->compile($body);
                 return [
                     'type' => 'render',
                     'code' => "function($cleanParams) { ob_start(); ?>" . $compiled . "<?php return ob_get_clean(); }"
@@ -533,7 +599,7 @@ final class Directives
             if ($c === $in) $depth++;
             elseif ($c === $out && --$depth === 0) return substr($this->src, $open + 1, $i - $open - 1);
         }
-        $this->fail("a $in is never closed", substr_count($this->src, "\n", 0, $open) + 1);
+        $this->fail("a $in is never closed", $this->lineAt($open));
     }
 
     /** @param list<string> $kinds @return array{string, int, int, bool} */
@@ -555,7 +621,7 @@ final class Directives
 
     private function fail(string $message, int $line = 0): never
     {
-        $line = $line ?: substr_count($this->src, "\n", 0, min($this->pos, $this->len)) + 1;
-        throw new TemplateError("$message in {$this->file} on line $line");
+        $line = $line ?: $this->lineAt(min($this->pos, $this->len));
+        throw new TemplateError("$message in {$this->file} on line $line", $this->file, $line);
     }
 }

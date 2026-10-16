@@ -102,7 +102,7 @@ test("the hover for a found component shows its file and props", () => {
   assert.match(hover.contents.value, /Props: `title`, `footer`/);
 });
 
-test("hovering @map, @filter, return(...), @cast(...) and the @{ } echo hole explains what goes inside", () => {
+test("hovering @map, @filter, return(...), @render(...) and the @{ } echo hole explains what goes inside", () => {
   const { root, providers } = project({});
   const hoverAt = (src, index) => providers.hover.provideHover(document(path.join(root, VIEW), src), new Position(0, index));
 
@@ -119,15 +119,32 @@ test("hovering @map, @filter, return(...), @cast(...) and the @{ } echo hole exp
   assert.match(ret.contents.value, /\*\*return\(\.\.\.\)\*\*/);
   assert.match(ret.contents.value, /ob_start/);
 
-  const castSrc = "@{ @cast(<p>x</p>) }";
-  const cast = hoverAt(castSrc, castSrc.indexOf("@cast") + 2);
-  assert.match(cast.contents.value, /\*\*@cast\(\.\.\.\)\*\*/);
-  assert.match(cast.contents.value, /return\(\.\.\.\)/);
+  const renderSrc = "@{ @render(<p>x</p>) }";
+  const render = hoverAt(renderSrc, renderSrc.indexOf("@render") + 2);
+  assert.match(render.contents.value, /\*\*@render\(\.\.\.\)\*\*/);
+  assert.match(render.contents.value, /return\(\.\.\.\)/);
 
   const holeSrc = "<p>@{ $x }</p>";
   const hole = hoverAt(holeSrc, holeSrc.indexOf("@{"));
   assert.match(hole.contents.value, /\*\*@\{ \.\.\. \}\*\*/);
   assert.match(hole.contents.value, /echo hole/);
+});
+
+test("the FUNCTION_DIRECTIVES words (@htchars, @route, @cast, @csrf, @alerts, @modules) have no hardcoded hover text - FunctionDirectiveHovers bridges to the real function's own docblock instead", () => {
+  const { root, providers } = project({});
+  const hoverAt = (src, index) => providers.hover.provideHover(document(path.join(root, VIEW), src), new Position(0, index));
+  for (const word of ["@htchars", "@route", "@cast", "@csrf", "@alerts", "@modules"]) {
+    assert.equal(hoverAt(`${word}(x)`, 2), undefined, `${word} has no static Hovers entry left`);
+  }
+  // @css/@script/@js/@scripts/@styles/@map/@filter/return/@render keep their hardcoded entries (no single
+  // real-PHP-function equivalent to bridge to for these)
+  assert.ok(providers.functionDirectiveHover, "FunctionDirectiveHovers is registered separately");
+});
+
+test("EmbeddedInlayHints is registered when the host API supports it, so @route(...)/@htchars(...) etc. can get the same parameter-name hints a real PHP call gets natively", () => {
+  const { providers } = project({});
+  assert.ok(providers.inlayHints, "EmbeddedInlayHints is registered");
+  assert.equal(typeof providers.inlayHints.provideInlayHints, "function");
 });
 
 test("hovering .filter/.map in a fluent @$var.filter(...).map(...) chain explains each segment", () => {

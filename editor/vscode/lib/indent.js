@@ -26,7 +26,8 @@ class Scanner {
     this.pending = seed; // tags another file opened: they become real at the first closing tag that matches the innermost one
     this.unmatched = []; // closing tags that closed nothing
     this.ambiguous = false; // a closer dropped open tags: the nesting cannot be trusted to seed from
-    this.mode = "html"; // html | php | comment | raw | heredoc | tag
+    this.mode = "html"; // html | php | comment | raw | heredoc | tag | block
+    this.returnMode = "html"; // the mode a comment/heredoc region resumes to when it ends
     this.rawEnd = null; // RegExp that ends raw / comment / heredoc text
     this.tag = null; // {name, quote, brace}: a tag whose attributes continue on the next line
     this.rawKeep = false;
@@ -62,10 +63,23 @@ class Scanner {
       const m = this.rawEnd.exec(text);
       if (!m) return { depth: null, after: this.depth() };
       i = m.index;
-      this.mode = "html";
+      this.mode = this.returnMode;
       this.rawEnd = null;
       // the line that ends a comment, a heredoc, <pre> or <textarea> is part of that text; one that ends <script> or <style> is a closing tag
       ctx.keep = startMode !== "raw" || this.rawKeep;
+    } else if (this.mode === "blockcomment") {
+      // unlike a genuine heredoc/raw block (where indentation can be semantically meaningful), a /* */ comment's own
+      // continuation lines are reindented to the depth where it opened - the same depth as every other line around
+      // it, since there is nothing content-meaningful about how far left a doc-comment line happens to sit
+      const m = this.rawEnd.exec(text);
+      if (!m) {
+        if (/^\s*$/.test(text)) return { depth: null, after: this.depth(), blank: true };
+        return { depth: this.depth(), after: this.depth() };
+      }
+      i = m.index;
+      this.mode = this.returnMode;
+      this.rawEnd = null;
+      ctx.depth = this.depth();
     }
     this.scan(text, i, ctx);
     if (ctx.depth === null) ctx.depth = this.depth();
@@ -91,6 +105,10 @@ class Scanner {
         i = this.scanPhp(text, i, ctx);
         continue;
       }
+      if (this.mode === "block") {
+        i = this.scanBlock(text, i, ctx);
+        continue;
+      }
       if (this.mode === "raw" || this.mode === "comment" || this.mode === "heredoc") {
         const m = this.rawEnd.exec(text.slice(i));
         if (!m) {
@@ -98,7 +116,7 @@ class Scanner {
           return;
         }
         i += m.index;
-        this.mode = "html";
+        this.mode = this.returnMode;
         this.rawEnd = null;
         continue;
       }
@@ -115,6 +133,7 @@ class Scanner {
           const end = text.indexOf("-->", i + 4);
           if (end === -1) {
             this.mode = "comment";
+            this.returnMode = "html";
             this.rawEnd = /-->/;
             ctx.keep = true;
             return;
@@ -216,6 +235,7 @@ class Scanner {
       const closer = new RegExp("</" + lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*>", "i");
       if (!closer.test(rest)) {
         this.mode = "raw";
+        this.returnMode = "html";
         this.rawKeep = lower === "pre" || lower === "textarea"; // whitespace before </pre> is content
         this.rawEnd = new RegExp("</" + lower + "\\s*>", "i");
       } else {
@@ -238,7 +258,7 @@ class Scanner {
     }
     const before = i > 0 ? text[i - 1] : "";
     if (before && /[\w.]/.test(before)) return 0;
-    const m = /^@(forelse|foreach|elseif|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|switch|unless|isset|default|empty|else|case|for|while|if|php|break|continue)\b/.exec(text.slice(i));
+    const m = /^@(forelse|foreach|elseif|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|switch|unless|isset|default|empty|else|case|for|while|if|php|break|continue|map|filter|scripts|styles|script|js|css)\b/.exec(text.slice(i));
     if (!m) return 0;
     const word = m[1];
     let length = m[0].length;
@@ -265,7 +285,13 @@ class Scanner {
       if (!hasArgs) length = text.length - i; // the arguments go on in the next line; good enough
     }
 
-    if (OPEN_DIRECTIVES.has(word)) {
+    if (word === "css" || word === "script" || word === "js") {
+      this.content(ctx);
+      if (!hasArgs) {
+        this.mode = "block";
+        this.push("call", word);
+      }
+    } else if (OPEN_DIRECTIVES.has(word)) {
       this.content(ctx);
       this.push("dir", word);
     } else if (word === "php") {
@@ -349,7 +375,8 @@ class Scanner {
         this.content(ctx);
         const end = text.indexOf("*/", i + 2);
         if (end === -1) {
-          this.mode = "heredoc";
+          this.mode = "blockcomment";
+          this.returnMode = "php";
           this.rawEnd = /\*\//;
           return n;
         }
@@ -361,6 +388,7 @@ class Scanner {
         if (m) {
           this.content(ctx);
           this.mode = "heredoc";
+          this.returnMode = "php";
           this.rawEnd = new RegExp("^\\s*" + m[1] + "\\b");
           return n;
         }
@@ -427,6 +455,73 @@ class Scanner {
     return n;
   }
 
+  /** The body of `@css(`/`@script(`/`@js(`: bare `{`/`}`/`(`/`)` nesting (not PHP), same bracket-stack idiom as scanPhp. */
+  scanBlock(text, i, ctx) {
+    const n = text.length;
+    for (; i < n; i++) {
+      const c = text[i];
+      if (c === " " || c === "\t") continue;
+      if (c === '"' || c === "'") {
+        this.content(ctx);
+        for (i++; i < n && text[i] !== c; i++) if (text[i] === "\\") i++;
+        continue;
+      }
+      if (c === "/" && text[i + 1] === "/") {
+        this.content(ctx);
+        return n;
+      }
+      if (c === "/" && text[i + 1] === "*") {
+        this.content(ctx);
+        const end = text.indexOf("*/", i + 2);
+        if (end === -1) {
+          this.mode = "blockcomment";
+          this.returnMode = "block";
+          this.rawEnd = /\*\//;
+          return n;
+        }
+        i = end + 1;
+        continue;
+      }
+      if (c === "@" && text[i + 1] === "{") {
+        this.content(ctx);
+        let depth = 0;
+        let j = i + 1;
+        for (; j < n; j++) {
+          if (text[j] === "{") depth++;
+          else if (text[j] === "}" && --depth === 0) {
+            j++;
+            break;
+          }
+        }
+        i = j - 1;
+        continue;
+      }
+      if (c === "{") {
+        this.content(ctx);
+        this.push("brace");
+      } else if (c === "}") {
+        this.popTo((e) => e.kind === "brace");
+        if (ctx.depth === null) ctx.depth = this.depth();
+        ctx.leading = false;
+      } else if (c === "(") {
+        this.content(ctx);
+        this.push("paren");
+      } else if (c === ")") {
+        const top = this.stack[this.stack.length - 1];
+        this.popTo((e) => e.kind === "paren" || e.kind === "call");
+        if (ctx.depth === null) ctx.depth = this.depth();
+        ctx.leading = false;
+        if (top && top.kind === "call") {
+          this.mode = "html";
+          return i + 1;
+        }
+      } else {
+        this.content(ctx);
+      }
+    }
+    return n;
+  }
+
   insideAltSwitch() {
     return this.stack.some((e) => e.kind === "alt" && e.name === "switch") || this.stack.some((e) => e.kind === "brace");
   }
@@ -483,6 +578,17 @@ function indentString(depth, { tabSize = 4, insertSpaces = true } = {}) {
   return insertSpaces ? " ".repeat(tabSize * depth) : "\t".repeat(depth);
 }
 
+/**
+ * A doc-comment continuation/closing line (` * text`, `*/`) gets one extra alignment space after the normal indent,
+ * so its `*` lines up under the second `*` of the comment's own `/**` opener - the universal JSDoc/PHPDoc
+ * convention. Detected purely by the line's own text (starts with a literal `*` once its old leading whitespace is
+ * stripped) - simpler than threading "am I inside a block comment" out of the scanner, and safe: real PHP/JS code
+ * never starts a line with a bare `*` (it is never valid at statement-start position).
+ */
+function indentPrefix(depth, stripped, options) {
+  return indentString(depth, options) + (stripped.startsWith("*") ? " " : "");
+}
+
 /** The text with every line re-indented. @returns {string} */
 function formatText(text, options = {}) {
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
@@ -492,7 +598,8 @@ function formatText(text, options = {}) {
     .map((line, i) => {
       if (/^\s*$/.test(line)) return "";
       if (depths[i] === null) return line;
-      return indentString(depths[i], options) + line.replace(/^[ \t]+/, "");
+      const stripped = line.replace(/^[ \t]+/, "");
+      return indentPrefix(depths[i], stripped, options) + stripped;
     })
     .join(eol);
 }
@@ -501,7 +608,8 @@ function formatText(text, options = {}) {
 function indentFor(lines, index, options = {}) {
   const { depths, after } = computeIndents(lines.slice(0, index + 1));
   if (/^\s*$/.test(lines[index] ?? "")) return indentString(index > 0 ? after[index - 1] : 0, options);
-  return depths[index] === null ? null : indentString(depths[index], options);
+  if (depths[index] === null) return null;
+  return indentPrefix(depths[index], (lines[index] ?? "").replace(/^[ \t]+/, ""), options);
 }
 
 module.exports = { computeIndents, formatText, indentFor, indentString };

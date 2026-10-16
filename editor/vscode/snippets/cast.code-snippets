@@ -203,12 +203,12 @@
     ],
     "description": "@$items.filter(...).map(...) fluent method chaining"
   },
-  "Cast @cast": {
-    "prefix": "acast",
+  "Cast @render": {
+    "prefix": "arender",
     "body": [
-      "@cast(<${1:p}>$0</${1:p}>)"
+      "@render(<${1:p}>$0</${1:p}>)"
     ],
-    "description": "Render compiled Cast markup inside expressions"
+    "description": "Render compiled Cast markup inside expressions (alias for return(...))"
   },
   "Cast array_map": {
     "prefix": "aarraymap",

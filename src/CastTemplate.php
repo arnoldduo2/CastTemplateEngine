@@ -19,7 +19,7 @@ namespace CastTemplateEngine;
  */
 final class CastTemplate
 {
-    public const VERSION = '1.6.0';
+    public const VERSION = '1.7.0';
 
     private const OPTIONS = ['viewsDir', 'cacheDir', 'checkModified', 'shared'];
 
@@ -140,7 +140,10 @@ final class CastTemplate
         }
 
         $file = $this->componentsDir . '/' . $path . $this->ext;
-        return $this->evaluate($this->compile($file), $props, true);
+        Assets::pushScope();
+        $html = $this->evaluate($this->compile($file), $props, true);
+        $ids = Assets::popScope();
+        return $ids ? Css::injectScope($html, $ids) : $html;
     }
 
     /** `<Card ...>` : start capturing children. */
@@ -209,7 +212,10 @@ final class CastTemplate
         if (isset($this->compiled[$file])) return $this->compiled[$file];
 
         $target = $this->cacheDir . '/' . md5($file) . '.php';
-        if (!is_file($target) || ($this->checkModified && filemtime($target) < filemtime($file))) {
+        // <= (not <): on a filesystem with second-granularity mtimes, a source edit landing in the same second as
+        // the cache's own write (e.g. two quick saves, or a save right after the first compile) must still be
+        // treated as "newer than the cache", or the edit is silently served stale until the next distinct second.
+        if (!is_file($target) || ($this->checkModified && filemtime($target) <= filemtime($file))) {
             if (!is_dir($this->cacheDir) && !@mkdir($this->cacheDir, 0775, true) && !is_dir($this->cacheDir)) {
                 throw new TemplateError("Cache directory \"{$this->cacheDir}\" is not writable");
             }
@@ -223,7 +229,20 @@ final class CastTemplate
                 1,
             );
             file_put_contents($tmp, "<?php /* $file */ ?>" . $code);
-            rename($tmp, $target);
+            // rename() is atomic on POSIX, but on Windows it can be denied ("Access is denied", error 5) when
+            // another concurrent request still has $target open via include() - a transient lock that normally
+            // clears within milliseconds. A few short retries absorb that; if it still won't go, either another
+            // worker's equally-fresh compile already replaced $target (fine, use it) or nothing has yet (fall back
+            // to copy(), which Windows allows even when the rename it denied).
+            $renamed = @rename($tmp, $target);
+            for ($i = 0; !$renamed && $i < 5; $i++) {
+                usleep(10_000);
+                $renamed = @rename($tmp, $target);
+            }
+            if (!$renamed && !is_file($target)) {
+                @copy($tmp, $target);
+            }
+            if (is_file($tmp)) @unlink($tmp);
         }
 
         return $this->compiled[$file] = $target;

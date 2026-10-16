@@ -347,7 +347,7 @@ Plain PHP works as before (`<?php ... ?>`, `<?= ... ?>`). For loops, conditions 
 | `@filter($items, ($item) => condition)` | standalone in-place collection filtering |
 | `@filter($items, predicate, mapCallback)` | filters and maps in one call |
 | `@$items.filter(...).map(...)` | fluent filter-then-map chain on arrays / objects |
-| `@{ $cond ? @cast(<p>Yes</p>) : @cast(<p>No</p>) }` | inline conditional Cast markup inside expressions |
+| `@{ $cond ? return(<p>Yes</p>) : @render(<p>No</p>) }` | inline conditional Cast markup inside expressions (`return(...)` and `@render(...)` are aliases) |
 | `@@` | a literal `@` |
 
 ### Keys and `data-el-key`
@@ -487,7 +487,7 @@ The following snippet triggers are available in the editor:
 | `amapobj` | Object Map Shorthand | `@$items.map(($item, $i) => return(<Card key={$i}>...</Card>))` |
 | `afilter` | Filter Collection | `@filter($items, ($item) => $item->quantity > 0)` |
 | `achain` | Chained Filter and Map | `@$items.filter(($item) => condition).map(($item, $i) => return(...))` |
-| `acast` | Conditional Inline Render | `@{ $cond ? @cast(<p>Yes</p>) : @cast(<p>No</p>) }` |
+| `arender` | Conditional Inline Render | `@{ $cond ? @render(<p>Yes</p>) : @render(<p>No</p>) }` |
 | `ascript` | Component Client Script | `@script(handleEvent('click', '.btn', (e, el) => { ... }))` |
 | `ajs` | Component Script Alias | `@js(handleEvent('click', '.btn', (e, el) => { ... }))` |
 | `acss` | Scoped Component Styles | `@css(li.active { color: @{ $color }; })` |

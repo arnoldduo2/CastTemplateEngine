@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.7.0
+
+- **Embedded Language Intelligence Bridge**:
+  - Virtual document bridge (`cast-embedded:`) forwarding `@css(...)`, `@script(...)`, `@js(...)`, and `@{ ... }` echo holes to VS Code's native PHP, JS, and CSS language providers.
+  - Parameter-name inlay hints (`EmbeddedInlayHints`) for functional directives (`@route(...)`, `@htchars(...)`, etc.), matching native PHP function calls.
+  - Native hover documentation (`FunctionDirectiveHovers` & `EmbeddedHovers`) bridging directly to real PHP docblocks and function signatures.
+  - Go to Definition (`EmbeddedDefinitions`): Ctrl+click / F12 resolves variables and symbols inside `@{ }` echo holes, including loop/callback variables in `@map`/`@filter`/`@foreach`.
+  - Completions (`EmbeddedCompletions`) for CSS properties, JS APIs, and PHP expressions inside directive bodies and echo holes.
+- **Syntax Highlighting & Styling**:
+  - Dedicated TextMate scope `keyword.control.directive.styled.cast` with configuration defaults for styled directives and bracket punctuation coloring.
+  - Added `arender` snippet alias for `@render(...)`.
+- **Indentation Improvements**:
+  - Corrected doc comment (`/** ... */`) continuation line re-indentation within `@script(...)` and `@css(...)` blocks.
+
 ## 1.6.0
 
 - **Hover for functional directives**: `@map(...)`, `@filter(...)`, the inline-render transform (`return(...)`/`@cast(...)`), the `@{ ... }` echo hole, and every `.filter`/`.map` segment of a fluent collection chain (`@$items.filter(...).map(...)`) now show hover documentation with accepted parameters and a short example.

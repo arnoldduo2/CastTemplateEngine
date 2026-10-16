@@ -2,7 +2,7 @@
   "name": "cast-framework",
   "displayName": "CastFramework",
   "description": "Highlighting, navigation and prop-aware completion for CastFramework views (.cast.php): component tags, docblock props and types, Ctrl+click to open a component's file.",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "publisher": "anode",
   "license": "MIT",
   "repository": {
@@ -124,7 +124,28 @@
         "command": "cast.fixIndentation",
         "title": "Cast: Fix indentation"
       }
-    ]
+    ],
+    "configurationDefaults": {
+      "editor.tokenColorCustomizations": {
+        "textMateRules": [
+          {
+            "scope": "keyword.control.directive.styled.cast",
+            "settings": {
+              "fontStyle": "bold italic underline"
+            }
+          },
+          {
+            "scope": [
+              "punctuation.section.directive.scope.begin.cast",
+              "punctuation.section.directive.scope.end.cast"
+            ],
+            "settings": {
+              "foreground": "#7B68EE"
+            }
+          }
+        ]
+      }
+    }
   },
   "scripts": {
     "test": "node --test \"test/*.test.js\"",

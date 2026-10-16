@@ -53,6 +53,13 @@ class Hover {
     this.range = range;
   }
 }
+class InlayHint {
+  constructor(position, label, kind) {
+    this.position = position;
+    this.label = label;
+    this.kind = kind;
+  }
+}
 
 class CompletionItem {
   constructor(label, kind) {
@@ -112,6 +119,7 @@ function create({ root, settings = {} }) {
     DocumentLink,
     MarkdownString,
     Hover,
+    InlayHint,
     providers,
     collections,
     handlers,
@@ -128,11 +136,26 @@ function create({ root, settings = {} }) {
     languages: {
       registerDocumentLinkProvider: (selector, p) => ((providers.links = p), { dispose() {} }),
       // several providers of a kind may register: tests look at them by role
-      registerDefinitionProvider: (selector, p) => ((providers[p.constructor.name === "PropDefinitions" ? "propDefinition" : "definition"] = p), { dispose() {} }),
-      registerHoverProvider: (selector, p) => ((providers[p.constructor.name === "ComponentHovers" ? "componentHover" : "hover"] = p), { dispose() {} }),
-      registerCompletionItemProvider: (selector, p) => ((providers.completion = p), { dispose() {} }),
+      registerDefinitionProvider: (selector, p) => {
+        const slot = p.constructor.name === "PropDefinitions" ? "propDefinition" : p.constructor.name === "EmbeddedDefinitions" ? "embeddedDefinition" : "definition";
+        providers[slot] = p;
+        return { dispose() {} };
+      },
+      registerHoverProvider: (selector, p) => {
+        const slot = p.constructor.name === "ComponentHovers" ? "componentHover"
+          : p.constructor.name === "EmbeddedHovers" ? "embeddedHover"
+          : p.constructor.name === "FunctionDirectiveHovers" ? "functionDirectiveHover"
+          : "hover";
+        providers[slot] = p;
+        return { dispose() {} };
+      },
+      registerCompletionItemProvider: (selector, p) => {
+        providers[p.constructor.name === "EmbeddedCompletions" ? "embeddedCompletion" : "completion"] = p;
+        return { dispose() {} };
+      },
       registerDocumentFormattingEditProvider: (selector, p) => ((providers.formatting = p), { dispose() {} }),
       registerDocumentRangeFormattingEditProvider: (selector, p) => ((providers.rangeFormatting = p), { dispose() {} }),
+      registerInlayHintsProvider: (selector, p) => ((providers.inlayHints = p), { dispose() {} }),
       registerCodeActionsProvider: (selector, p) => ((providers.codeActions = p), { dispose() {} }),
       createDiagnosticCollection: (name) => {
         const store = new Map();

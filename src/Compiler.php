@@ -29,6 +29,8 @@ final class Compiler
     private array $open = [];
     /** line where the expression being compiled starts, for error messages */
     private int $exprLine = 0;
+    /** @var array<string, string> original class name => scoped name (see Css::scanClassRenames()), computed once per compile() from the raw source */
+    private array $classRenames = [];
 
     public function __construct(
         private string $componentsDir,
@@ -38,7 +40,8 @@ final class Compiler
 
     public function compile(string $source): string
     {
-        $source = (new Directives($this->file))->compile($source);     // @{ }, @foreach ... @endforeach
+        $this->classRenames = Css::scanClassRenames($source);
+        $source = (new Directives($this->file, $this->classRenames))->compile($source);     // @{ }, @foreach ... @endforeach
         $this->src = $source;
         $this->len = strlen($source);
         $this->pos = 0;
@@ -233,15 +236,32 @@ final class Compiler
                 $expr = $this->expression($this->braces());
                 $emitAttr = ($attr === 'key') ? 'data-el-key' : $attr;
                 $this->emit('<?= $this->attr(' . var_export($emitAttr, true) . ", ($expr)) ?>", $start);
+            } elseif ($c === '<' && ($this->src[$this->pos + 1] ?? '') === '?') {
+                // a bare attribute value that is itself a short-echo PHP tag (e.g. from an @directive like
+                // @route(...)/@htchars(...) used without braces): captured as one atomic unit and quoted, so a
+                // result containing a space stays one valid attribute value instead of silently breaking the tag.
+                // The braced {attr={...}} form is still preferred - this only makes the bare form safe, it does
+                // not escape the result the way $this->attr() does for the braced form.
+                $close = strpos($this->src, '?>', $this->pos + 2);
+                $end = $close === false ? $this->len : $close + 2;
+                $tag = substr($this->src, $this->pos, $end - $this->pos);
+                $this->pos = $end;
+                $emitAttr = ($attr === 'key') ? 'data-el-key' : $attr;
+                $this->out .= "$emitAttr$before=$after\"$tag\"";
             } elseif ($c === '"' || $c === "'") {
                 $line = $this->line($this->pos);
                 $value = $this->quoted($c);
                 $this->noTagsInQuotes($value, $attr, $line);
+                if ($attr === 'class' && $this->classRenames) $value = $this->renameClassTokens($value);
                 $emitAttr = ($attr === 'key') ? 'data-el-key' : $attr;
                 $this->out .= "$emitAttr$before=$after$c$value$c";
             } else {
+                $line = $this->line($this->pos);
                 preg_match('/\G[^\s>]*/', $this->src, $v, 0, $this->pos);
                 $this->pos += strlen($v[0]);
+                if (substr_count($v[0], '}') !== substr_count($v[0], '{')) {
+                    $this->fail("Attribute $attr is missing its opening { (found \"$v[0]\"). Write $attr={...}", $line);
+                }
                 $emitAttr = ($attr === 'key') ? 'data-el-key' : $attr;
                 $this->out .= "$emitAttr$before=$after$v[0]";
             }
@@ -399,6 +419,21 @@ final class Compiler
         return implode(' . ', $code);
     }
 
+    /**
+     * Replaces whitespace-separated tokens in a literal `class="..."` value with their Css::scanClassRenames()
+     * scoped name where one exists (e.g. `myBtn` -> `a1b2c3d4-myBtn`); a token not declared by any @css() in this
+     * file is left exactly as written. Skips over any embedded `<?= ... ?>`/`<?php ... ?>` (left from Directives'
+     * `@{ }` pass) rather than rewriting inside it.
+     */
+    private function renameClassTokens(string $value): string
+    {
+        return (string) preg_replace_callback(
+            '/<\?.*?\?>|[^\s<]+/s',
+            fn(array $m): string => $m[0][0] === '<' ? $m[0] : ($this->classRenames[$m[0]] ?? $m[0]),
+            $value,
+        );
+    }
+
     /** A component written inside quotes would be printed as text: point to the {} form. */
     private function noTagsInQuotes(string $value, string $attr, int $line): void
     {
@@ -448,7 +483,7 @@ final class Compiler
     private function fail(string $message, ?int $line = null): never
     {
         $line ??= $this->line($this->pos);
-        throw new TemplateError("$message in {$this->file} on line $line");
+        throw new TemplateError("$message in {$this->file} on line $line", $this->file, $line);
     }
 
     /**

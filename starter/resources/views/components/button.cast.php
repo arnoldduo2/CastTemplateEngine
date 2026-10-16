@@ -11,21 +11,21 @@ $href ??= null;
 $variant ??= 'primary';
 ?>
 @css(
-.btn {
-padding: 8px 16px;
-border-radius: 4px;
-border: none;
-cursor: pointer;
-}
-.btn-primary {
-background: @{ $variant === 'primary' ? '#2563eb' : '#6b7280' };
-color: #fff;
-}
+    .btn {
+        padding: 8px 16px;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+    }
+    .btn-primary {
+        background: @{ $variant === 'primary' ? '#2563eb' : '#6b7280' };
+        color: #fff;
+    }
 )
 @script(
-handleEvent('click', '.btn', (e, el) => {
-el.classList.add('btn-clicked');
-});
+    handleEvent('click', '.btn', (e, el) => {
+            el.classList.add('btn-clicked');
+        });
 )
 <?php if ($href): ?>
     <a href="@{ $href }" class="btn btn-@{ $variant }"><?= $label ?></a>

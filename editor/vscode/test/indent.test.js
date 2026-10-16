@@ -37,6 +37,21 @@ test("strings, comments and ternaries do not confuse PHP nesting", () => {
   assert.equal(out, `<div>\n    <?php\n    $s = "{ ( [";  // } ) ]\n    $t = '}';\n    /* { */\n    $x = $a ? 1 : 2;\n    ?>\n    <p>x</p>\n</div>`);
 });
 
+test("a multi-line /* */ doc comment is reindented to its surrounding depth, with its * lines aligned one space in (JSDoc/PHPDoc style) - unlike a real heredoc, which is left untouched", () => {
+  const out = fmt(`<div>\n<?php\nif ($a) {\n/**\n*Text\n*@param int $x\n*/\n$y = 1;\n}\n?>\n</div>`);
+  assert.equal(out, `<div>\n    <?php\n    if ($a) {\n        /**\n         *Text\n         *@param int $x\n         */\n        $y = 1;\n    }\n    ?>\n</div>`);
+});
+
+test("the same alignment applies inside @script()/@css() block content", () => {
+  const out = fmt(`@script(\nfunction f() {\n/**\n*Doc\n*/\nreturn 1;\n}\n)`);
+  assert.equal(out, `@script(\n    function f() {\n        /**\n         *Doc\n         */\n        return 1;\n    }\n)`);
+});
+
+test("an already-correctly-aligned doc comment is left byte-identical (idempotent)", () => {
+  const src = `<?php\n/**\n * A styled thing.\n *\n * @var string $x Some var\n */\n$x = 1;\n?>`;
+  assert.equal(fmt(src), src);
+});
+
 test("@ directives: if/elseif/else, foreach, forelse/empty, for, while, unless, isset, switch/case", () => {
   const out = fmt(`<div>\n@if ($x):\n<ul>\n@foreach ($u as $i)\n<li>@{ $i }</li>\n@endforeach\n</ul>\n@elseif ($y)\n<b>y</b>\n@else\n<i>n</i>\n@endif\n@forelse ($l as $i)\n<li>@{ $i }</li>\n@empty\n<p>none</p>\n@endforelse\n@unless ($h)\nv\n@endunless\n@isset ($z)\nw\n@endisset\n@for ($i = 0; $i < 2; $i++)\n@while (false)\nx\n@endwhile\n@endfor\n@switch ($n)\n@case (1)\none\n@break\n@case (2)\ntwo\n@break\n@default\nmany\n@endswitch\n</div>`);
   assert.equal(out, `<div>
