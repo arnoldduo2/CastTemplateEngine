@@ -1,0 +1,158 @@
+{
+  "name": "cast-framework",
+  "displayName": "CastFramework",
+  "description": "Highlighting, navigation and prop-aware completion for CastFramework views (.cast.php): component tags, docblock props and types, Ctrl+click to open a component's file.",
+  "version": "1.6.0",
+  "publisher": "anode",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arnoldduo2/CastFramework.git",
+    "directory": "editor/vscode"
+  },
+  "homepage": "https://github.com/arnoldduo2/CastFramework#editor-support",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Other"
+  ],
+  "keywords": [
+    "cast",
+    "castframework",
+    "php",
+    "template",
+    "component",
+    "cast.php"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:php",
+    "workspaceContains:**/*.cast.php"
+  ],
+  "contributes": {
+    "grammars": [
+      {
+        "scopeName": "cast.injection",
+        "path": "./syntaxes/cast-injection.tmLanguage.json",
+        "injectTo": [
+          "text.html.php"
+        ]
+      },
+      {
+        "scopeName": "cast.injection.echo",
+        "path": "./syntaxes/cast-echo.tmLanguage.json",
+        "injectTo": [
+          "text.html.php"
+        ]
+      }
+    ],
+    "snippets": [
+      {
+        "language": "php",
+        "path": "./snippets/cast.code-snippets"
+      },
+      {
+        "language": "html",
+        "path": "./snippets/cast.code-snippets"
+      },
+      {
+        "language": "javascript",
+        "path": "./snippets/cast-js.code-snippets"
+      }
+    ],
+    "configuration": {
+      "title": "CastFramework",
+      "properties": {
+        "cast.componentsPath": {
+          "type": [
+            "string",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "default": "resources/views/components",
+          "markdownDescription": "Folder(s) with the component files, relative to the workspace folder. Used for Ctrl+click on `<Component />` tags. When `config/view.php` sets `components`, that folder is used as well."
+        },
+        "cast.viewsPath": {
+          "type": "string",
+          "default": "resources/views",
+          "markdownDescription": "Folder of the views, relative to the workspace folder (for `__includes('layouts.header')`, `views('home.home')`, `Component('btns.add')`)."
+        },
+        "cast.resourcesPath": {
+          "type": "string",
+          "default": "resources",
+          "markdownDescription": "Folder with `css/` and `js/` (for `__modules('app.app', 'js')`)."
+        },
+        "cast.extension": {
+          "type": "string",
+          "default": ".cast.php",
+          "markdownDescription": "The extension of view and component files that use the engine syntax."
+        },
+        "cast.diagnostics": {
+          "type": "string",
+          "enum": [
+            "off",
+            "hint",
+            "warning"
+          ],
+          "default": "hint",
+          "markdownDescription": "Problems in component tags, for components that document their props: unknown prop, missing required prop, a value outside the documented list, deprecated component or prop. `hint` shows faint dots only."
+        },
+        "cast.propCase": {
+          "type": "string",
+          "enum": [
+            "camel",
+            "kebab",
+            "snake"
+          ],
+          "default": "camel",
+          "markdownDescription": "How prop names are written when completed: `hasLabel`, `has-label` or `has_label` (the engine treats all three the same)."
+        },
+        "cast.autoIndent": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Keep the indentation right while typing in `.cast.php` files: after Enter, and when a line starts with a closing tag, `<?php endif ?>`, `@endif` or `@else`. `Format Document` and `Cast: Fix indentation` re-indent a whole view."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "cast.fixIndentation",
+        "title": "Cast: Fix indentation"
+      }
+    ],
+    "configurationDefaults": {
+      "editor.tokenColorCustomizations": {
+        "textMateRules": [
+          {
+            "scope": "keyword.control.directive.styled.cast",
+            "settings": {
+              "fontStyle": "bold italic underline"
+            }
+          },
+          {
+            "scope": [
+              "punctuation.section.directive.scope.begin.cast",
+              "punctuation.section.directive.scope.end.cast"
+            ],
+            "settings": {
+              "foreground": "#7B68EE"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "package": "npx @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.1.0"
+  }
+}

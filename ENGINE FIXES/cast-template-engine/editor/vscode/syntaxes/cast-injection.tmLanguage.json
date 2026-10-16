@@ -1,0 +1,684 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "CastFramework template syntax",
+  "scopeName": "cast.injection",
+  "injectionSelector": "L:text.html.php - (meta.embedded | source.php | comment | string.quoted | source.js | source.css), L:text.html.php meta.tag - (meta.embedded | source.php | comment | string.quoted), L:meta.embedded.expression.cast - (comment | string)",
+  "patterns": [
+    {
+      "include": "#directive-escape"
+    },
+    {
+      "include": "#directive-echo"
+    },
+    {
+      "include": "#directive-css"
+    },
+    {
+      "include": "#directive-js"
+    },
+    {
+      "include": "#directive-props"
+    },
+    {
+      "include": "#directive-chain"
+    },
+    {
+      "include": "#directive-styled"
+    },
+    {
+      "include": "#directive"
+    },
+    {
+      "include": "#component-close"
+    },
+    {
+      "include": "#component-open"
+    },
+    {
+      "include": "#brace-attribute"
+    }
+  ],
+  "repository": {
+    "component-close": {
+      "match": "(</)(Slot|[A-Z][A-Za-z0-9_]*(?:\\.[A-Z][A-Za-z0-9_]*)*)(\\s*)(>)",
+      "name": "meta.tag.component.close.cast",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.tag.begin.cast"
+        },
+        "2": {
+          "patterns": [
+            {
+              "include": "#tag-name"
+            }
+          ]
+        },
+        "4": {
+          "name": "punctuation.definition.tag.end.cast"
+        }
+      }
+    },
+    "component-open": {
+      "begin": "(<)(Slot|[A-Z][A-Za-z0-9_]*(?:\\.[A-Z][A-Za-z0-9_]*)*)(?=[\\s/>])",
+      "end": "(/?>)",
+      "name": "meta.tag.component.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.begin.cast"
+        },
+        "2": {
+          "patterns": [
+            {
+              "include": "#tag-name"
+            }
+          ]
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.end.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#attribute-string"
+        },
+        {
+          "include": "#spread-attribute"
+        },
+        {
+          "include": "#brace-attribute"
+        },
+        {
+          "include": "#attribute-name"
+        }
+      ]
+    },
+    "tag-name": {
+      "patterns": [
+        {
+          "match": "\\bSlot\\b",
+          "name": "entity.name.tag.slot.cast keyword.control.slot.cast"
+        },
+        {
+          "match": "\\.",
+          "name": "punctuation.separator.namespace.cast"
+        },
+        {
+          "match": "[A-Z][A-Za-z0-9_]*",
+          "name": "entity.name.tag.component.cast support.class.component.cast"
+        }
+      ]
+    },
+    "attribute-name": {
+      "patterns": [
+        {
+          "match": "=",
+          "name": "punctuation.separator.key-value.cast"
+        },
+        {
+          "match": "[A-Za-z_:@][-A-Za-z0-9_:.@]*",
+          "name": "entity.other.attribute-name.cast"
+        }
+      ]
+    },
+    "attribute-string": {
+      "patterns": [
+        {
+          "begin": "\"",
+          "end": "\"",
+          "name": "string.quoted.double.cast",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.cast"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.cast"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#embedded-php"
+            }
+          ]
+        },
+        {
+          "begin": "'",
+          "end": "'",
+          "name": "string.quoted.single.cast",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.cast"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.cast"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#embedded-php"
+            }
+          ]
+        }
+      ]
+    },
+    "embedded-php": {
+      "begin": "<\\?(?:=|php)?",
+      "end": "\\?>",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.begin.php"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.php"
+        }
+      },
+      "contentName": "meta.embedded.line.php",
+      "patterns": [
+        {
+          "include": "source.php"
+        }
+      ]
+    },
+    "spread-attribute": {
+      "begin": "(\\{)\\s*(?=\\.\\.\\.)",
+      "end": "\\}",
+      "name": "meta.attribute.spread.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "match": "\\.\\.\\.",
+          "name": "keyword.operator.spread.cast"
+        },
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "brace-attribute": {
+      "begin": "(?<==)\\s*(\\{)",
+      "end": "\\}",
+      "name": "meta.attribute.expression.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "php-expression": {
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#directive-chain"
+        },
+        {
+          "include": "#fluent-chain-styled"
+        },
+        {
+          "include": "#component-close"
+        },
+        {
+          "include": "#component-open"
+        },
+        {
+          "include": "#html-tag-close"
+        },
+        {
+          "include": "#html-tag-open"
+        },
+        {
+          "begin": "\\{",
+          "end": "\\}",
+          "patterns": [
+            {
+              "include": "#php-expression"
+            }
+          ]
+        },
+        {
+          "include": "source.php"
+        }
+      ]
+    },
+    "html-tag-close": {
+      "match": "(</)([a-z][a-z0-9:-]*)(\\s*)(>)",
+      "name": "meta.tag.structure.html",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.tag.begin.html"
+        },
+        "2": {
+          "name": "entity.name.tag.html"
+        },
+        "4": {
+          "name": "punctuation.definition.tag.end.html"
+        }
+      }
+    },
+    "html-tag-open": {
+      "begin": "(<)([a-z][a-z0-9:-]*)(?=[\\s/>])",
+      "end": "(/?>)",
+      "name": "meta.tag.structure.html",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.begin.html"
+        },
+        "2": {
+          "name": "entity.name.tag.html"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.end.html"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#attribute-string"
+        },
+        {
+          "include": "#spread-attribute"
+        },
+        {
+          "include": "#brace-attribute"
+        },
+        {
+          "include": "#attribute-name"
+        }
+      ]
+    },
+    "directive-escape": {
+      "match": "@@",
+      "name": "constant.character.escape.directive.cast"
+    },
+    "directive-echo": {
+      "begin": "(@)(\\{)",
+      "end": "\\}",
+      "name": "meta.directive.echo.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+        },
+        "2": {
+          "name": "punctuation.section.embedded.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "directive-css": {
+      "begin": "(?<![\\w.@])(@)(css)\\b\\s*(\\()",
+      "end": "(\\))",
+      "name": "meta.directive.css.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast keyword.control.directive.styled.cast"
+        },
+        "2": {
+          "name": "keyword.control.directive.cast keyword.control.directive.styled.cast"
+        },
+        "3": {
+          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast punctuation.section.directive.scope.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast punctuation.section.directive.scope.end.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#css-paren-group"
+        },
+        {
+          "include": "source.css"
+        }
+      ]
+    },
+    "css-paren-group": {
+      "begin": "\\(",
+      "end": "\\)",
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#css-paren-group"
+        },
+        {
+          "include": "source.css"
+        }
+      ]
+    },
+    "directive-js": {
+      "begin": "(?<![\\w.@])(@)(script|js)\\b\\s*(\\()",
+      "end": "(\\))",
+      "name": "meta.directive.js.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast keyword.control.directive.styled.cast"
+        },
+        "2": {
+          "name": "keyword.control.directive.cast keyword.control.directive.styled.cast"
+        },
+        "3": {
+          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast punctuation.section.directive.scope.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast punctuation.section.directive.scope.end.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#js-paren-group"
+        },
+        {
+          "include": "source.js"
+        }
+      ]
+    },
+    "js-paren-group": {
+      "begin": "\\(",
+      "end": "\\)",
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#js-paren-group"
+        },
+        {
+          "include": "source.js"
+        }
+      ]
+    },
+    "directive-props": {
+      "begin": "(?<![\\w.@])(@)(props)\\b(?:\\s+(extends)(::)([A-Za-z_][\\w.]*))?\\s*(\\{)",
+      "end": "(\\})",
+      "name": "meta.directive.props.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast keyword.control.directive.styled.cast"
+        },
+        "2": {
+          "name": "keyword.control.directive.cast keyword.control.directive.styled.cast"
+        },
+        "3": {
+          "name": "keyword.control.directive.cast keyword.control.directive.styled.cast"
+        },
+        "4": {
+          "name": "punctuation.accessor.cast"
+        },
+        "5": {
+          "name": "entity.name.tag.component.cast support.class.component.cast"
+        },
+        "6": {
+          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast punctuation.section.directive.scope.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast punctuation.section.directive.scope.end.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#props-nullable-type"
+        },
+        {
+          "include": "#props-brace-group"
+        },
+        {
+          "include": "source.php"
+        }
+      ]
+    },
+    "props-nullable-type": {
+      "comment": "A leading `?Type` at the start of a @props{} entry (e.g. `?string $x = null;`) is PHP's nullable-type syntax, not a ternary - but php.tmLanguage.json's own grammar only recognizes that distinction inside a real parameter list/return-type position, never at this directive's own top (bare) statement level. Left to source.php alone, it treats the `?` as the start of a ternary `?:` expression, which never finds its own `:` and keeps scanning indefinitely - silently swallowing the directive's own closing `}` (and everything after it) into that unclosed ternary scope. Matching the `?` here first, before source.php ever sees it, prevents that misparse. Anchored to the start of a line (optionally after whitespace) because every @props{} entry is written one per line - a real ternary's `?` is always preceded by a condition expression earlier on the same line, never alone at line-start.",
+      "match": "(?<=^[ \\t]*)\\?(?=[A-Za-z_])",
+      "name": "keyword.operator.type.nullable.php"
+    },
+    "props-brace-group": {
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#directive-escape"
+        },
+        {
+          "include": "#directive-echo"
+        },
+        {
+          "include": "#props-nullable-type"
+        },
+        {
+          "include": "#props-brace-group"
+        },
+        {
+          "include": "source.php"
+        }
+      ]
+    },
+    "directive": {
+      "begin": "(?<![\\w.@])(@)(for|foreach|forelse|while|if|elseif|unless|isset|switch|case|php|break|continue|else|empty|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|default)\\b",
+      "end": "(?<=\\))(?:[ \\t]*(:))?|(?![ \\t(])",
+      "name": "meta.directive.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+        },
+        "2": {
+          "name": "keyword.control.directive.cast"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.separator.directive.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#directive-arguments"
+        }
+      ]
+    },
+    "directive-arguments": {
+      "begin": "\\(",
+      "end": "\\)",
+      "name": "meta.directive.arguments.cast",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "include": "#paren-group"
+        },
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "directive-styled": {
+      "begin": "(?<![\\w.@])(@)(map|filter|scripts|styles)\\b",
+      "end": "(?<=\\))(?:[ \\t]*(:))?|(?![ \\t(])",
+      "name": "meta.directive.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast keyword.control.directive.styled.cast"
+        },
+        "2": {
+          "name": "keyword.control.directive.cast keyword.control.directive.styled.cast"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.separator.directive.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#directive-arguments-styled"
+        }
+      ]
+    },
+    "directive-arguments-styled": {
+      "begin": "\\(",
+      "end": "\\)",
+      "name": "meta.directive.arguments.cast",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.begin.cast keyword.control.directive.cast punctuation.section.directive.scope.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast keyword.control.directive.cast punctuation.section.directive.scope.end.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "include": "#paren-group"
+        },
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "directive-chain": {
+      "begin": "(?<![\\w.@])(@)(\\$?[A-Za-z_][A-Za-z0-9_]*)(?=\\s*\\.\\s*(?:filter|map)\\b)",
+      "end": "(?<=\\))(?!\\s*\\.\\s*(?:filter|map)\\b)",
+      "name": "meta.directive.chain.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+        },
+        "2": {
+          "name": "variable.other.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#fluent-chain-styled"
+        }
+      ]
+    },
+    "fluent-chain-styled": {
+      "begin": "(\\.)\\s*(filter|map)\\b\\s*(\\()",
+      "end": "(\\))",
+      "name": "meta.directive.fluent.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.accessor.cast"
+        },
+        "2": {
+          "name": "entity.name.function.cast keyword.control.directive.styled.cast"
+        },
+        "3": {
+          "name": "punctuation.section.directive.scope.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.directive.scope.end.cast"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#paren-group"
+        },
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "paren-group": {
+      "begin": "\\(",
+      "end": "\\)",
+      "patterns": [
+        {
+          "include": "#paren-group"
+        },
+        {
+          "include": "#php-expression"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "CastFramework @{ } inside attribute values",
+  "scopeName": "cast.injection.echo",
+  "injectionSelector": "L:text.html.php meta.tag string.quoted - (meta.embedded | source.php | comment | source.js | source.css)",
+  "patterns": [
+    {
+      "include": "#directive-echo"
+    }
+  ],
+  "repository": {
+    "directive-echo": {
+      "begin": "(@)(\\{)",
+      "end": "\\}",
+      "name": "meta.directive.echo.cast",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+        },
+        "2": {
+          "name": "punctuation.section.embedded.begin.cast"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.cast"
+        }
+      },
+      "contentName": "meta.embedded.expression.cast",
+      "patterns": [
+        {
+          "include": "#php-expression"
+        }
+      ]
+    },
+    "php-expression": {
+      "patterns": [
+        {
+          "begin": "\\{",
+          "end": "\\}",
+          "patterns": [
+            {
+              "include": "#php-expression"
+            }
+          ]
+        },
+        {
+          "include": "source.php"
+        }
+      ]
+    }
+  }
+}

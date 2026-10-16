@@ -1,0 +1,16 @@
+{
+  "Cast page script": {
+    "prefix": "cpagejs",
+    "body": [
+      "Cast.page({",
+      "\tmount(ctx) {",
+      "\t\tctx.on('click', '${1:.js-action}', async (event, el) => {",
+      "\t\t\t$0",
+      "\t\t});",
+      "\t},",
+      "\tdestroy(ctx) {},",
+      "});"
+    ],
+    "description": "The lifecycle of a Cast page script"
+  }
+}

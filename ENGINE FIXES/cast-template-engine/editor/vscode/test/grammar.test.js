@@ -1,0 +1,256 @@
+"use strict";
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { tokenize, find, available } = require("./tokenize");
+
+const skip = available() ? false : "run `node test/fetch-grammars.js` first (downloads VS Code's PHP/HTML grammars)";
+const has = (scopeLists, scope) => scopeLists.some((scopes) => scopes.includes(scope));
+
+test("component tags: brackets, names and the dotted separator", { skip }, async () => {
+  const t = await tokenize("<Card>x</Card><Btns.Button />");
+  assert.ok(has(find(t, "Card"), "entity.name.tag.component.cast"));
+  assert.ok(has(find(t, "Card"), "support.class.component.cast"));
+  assert.equal(find(t, "Card").length, 2, "opening and closing");
+  assert.ok(has(find(t, "Btns"), "entity.name.tag.component.cast"));
+  assert.ok(has(find(t, "."), "punctuation.separator.namespace.cast"));
+  assert.ok(has(find(t, "Button"), "entity.name.tag.component.cast"));
+  assert.ok(has(find(t, "/>"), "punctuation.definition.tag.end.cast"));
+  assert.ok(has(find(t, "</"), "punctuation.definition.tag.begin.cast"));
+});
+
+test("props: names, strings with embedded PHP, brace expressions with PHP, spread, bare attributes", { skip }, async () => {
+  const t = await tokenize(`<Card title="Hi <?= $n ?>" total={$p['qty'] + 1} {...$data} required />`);
+  assert.ok(has(find(t, "title"), "entity.other.attribute-name.cast"));
+  assert.ok(has(find(t, "required"), "entity.other.attribute-name.cast"));
+  assert.ok(has(find(t, "Hi"), "string.quoted.double.cast"));
+  assert.ok(has(find(t, "n"), "meta.embedded.line.php"), "PHP inside a string prop");
+  assert.ok(has(find(t, "qty"), "meta.embedded.expression.cast"), "PHP inside braces");
+  assert.ok(has(find(t, "qty"), "string.quoted.single.php"));
+  assert.ok(has(find(t, "..."), "keyword.operator.spread.cast"));
+  assert.ok(has(find(t, "data"), "variable.other.php"));
+});
+
+test("<Slot> is its own kind of tag", { skip }, async () => {
+  const t = await tokenize('<Card><Slot name="left">x</Slot></Card>');
+  assert.equal(find(t, "Slot").length, 2);
+  assert.ok(find(t, "Slot").every((s) => s.includes("entity.name.tag.slot.cast")));
+});
+
+test("components inside brace values: on plain HTML tags, nested, in a ternary, after a closure", { skip }, async () => {
+  const html = await tokenize("<div data-html={<Attributes.BadgeItem left={$n} />}>t</div>");
+  assert.ok(has(find(html, "BadgeItem"), "entity.name.tag.component.cast"));
+  assert.ok(has(find(html, "BadgeItem"), "meta.attribute.expression.cast"));
+  assert.ok(has(find(html, "div"), "entity.name.tag.html"), "the host tag is still HTML");
+
+  const tern = await tokenize("<Card total={$ok ? <Yes /> : <No />} fn={function() { return 1; }} after=\"x\" />");
+  assert.ok(has(find(tern, "Yes"), "entity.name.tag.component.cast"));
+  assert.ok(has(find(tern, "No"), "entity.name.tag.component.cast"));
+  assert.ok(has(find(tern, "after"), "entity.other.attribute-name.cast"), "the closure's braces did not end the value early");
+});
+
+test("what is not a component stays what the HTML/PHP grammars say", { skip }, async () => {
+  const t = await tokenize(['<div class="a"><span>text < B</span></div>', "<?php if ($a < B) { echo '<Card />'; } ?>", "<!-- <Card /> -->", "<script>if (a<B) { var s = '<Card />'; }</script>", '<p title="<Card />">q</p>'].join("\n"));
+  assert.equal(t.filter((x) => x.scopes.includes("entity.name.tag.component.cast")).length, 0, "no component scope anywhere above");
+  assert.ok(has(find(t, "div"), "entity.name.tag.html"));
+  assert.ok(has(find(t, "span"), "entity.name.tag.html"));
+});
+
+test("a view that mixes PHP blocks and components keeps both highlighted", { skip }, async () => {
+  const t = await tokenize(['<?php $items = [1, 2]; ?>', '<Card title="List">', '<?php foreach ($items as $i) : ?>', '  <Btns.Button label={"n-$i"} />', '<?php endforeach ?>', '</Card>'].join("\n"));
+  assert.ok(has(find(t, "foreach"), "keyword.control.foreach.php"));
+  assert.ok(has(find(t, "Button"), "entity.name.tag.component.cast"));
+  assert.ok(has(find(t, "endforeach"), "keyword.control.endforeach.php") || has(find(t, "endforeach"), "meta.embedded.line.php"));
+  assert.equal(find(t, "Card").length, 2);
+});
+
+test("without the injection grammar the same source has no component scopes (the test is meaningful)", { skip }, async () => {
+  const t = await tokenize("<Card total={$x} />", { cast: false });
+  assert.equal(t.filter((x) => x.scopes.some((s) => s.endsWith(".cast"))).length, 0);
+});
+
+test("the grammar files are valid JSON with the expected scope", () => {
+  const g = require("../syntaxes/cast-injection.tmLanguage.json");
+  assert.equal(g.scopeName, "cast.injection");
+  assert.ok(g.injectionSelector.includes("text.html.php"));
+  const pkg = require("../package.json");
+  assert.equal(pkg.contributes.grammars[0].scopeName, g.scopeName);
+  assert.deepEqual(pkg.contributes.grammars[0].injectTo, ["text.html.php"]);
+  const fs = require("node:fs");
+  const path = require("node:path");
+  for (const s of pkg.contributes.snippets) {
+    const snippets = JSON.parse(fs.readFileSync(path.join(__dirname, "..", s.path), "utf8"));
+    assert.ok(Object.keys(snippets).length > 0, s.path);
+    for (const [name, snippet] of Object.entries(snippets)) assert.ok(snippet.prefix && snippet.body, name);
+  }
+});
+
+test("@ directives: keyword, PHP in the parentheses, the optional colon, nested parentheses", { skip }, async () => {
+  const t = await tokenize("@foreach ($users as $user):\n  <p>@{ $user->name }</p>\n@endforeach\n@if (in_array($a, [1, (2 + 3)])) x @elseif ($b) y @else z @endif");
+  assert.ok(has(find(t, "foreach"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "endforeach"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "elseif"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "else"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "endif"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "@"), "punctuation.definition.directive.cast"));
+  assert.ok(has(find(t, "users"), "meta.embedded.expression.cast"), "PHP inside the parentheses");
+  assert.ok(has(find(t, "in_array"), "meta.embedded.expression.cast"));
+  assert.ok(has(find(t, ":"), "punctuation.separator.directive.cast"), "the colon");
+  assert.ok(find(t, "x").every((s) => !s.includes("meta.directive.cast")), "text after the closing parenthesis is plain again");
+  assert.ok(find(t, "y").every((s) => !s.includes("meta.directive.cast")));
+});
+
+test("@{ } is PHP, also inside attribute values and in a component prop string", { skip }, async () => {
+  const t = await tokenize('<p>@{ $a["k"] + 1 }</p><a href="/u/@{ $id }" class="x">l</a><Card title="Hi @{ $n }" />');
+  assert.ok(has(find(t, "a"), "meta.directive.echo.cast"));
+  assert.ok(has(find(t, "a"), "meta.embedded.expression.cast"));
+  assert.ok(has(find(t, "id"), "meta.directive.echo.cast"), "inside an href");
+  assert.ok(has(find(t, "n"), "meta.directive.echo.cast"), "inside a component string prop");
+  assert.ok(has(find(t, "Card"), "entity.name.tag.component.cast"));
+});
+
+test("@ that is not a directive: e-mail addresses, CSS rules, @@, unknown words, PHP blocks", { skip }, async () => {
+  const t = await tokenize(['me@example.com and hello@for.com', '<style>@media (min-width: 1px) { a { color: red } }</style>', '@import @unknown @@for', "<?php echo '@foreach (x)'; ?>"].join("\n"));
+  assert.equal(t.filter((x) => x.scopes.includes("keyword.control.directive.cast")).length, 0, "no directive anywhere above");
+  assert.ok(has(find(t, "@@"), "constant.character.escape.directive.cast"));
+});
+
+test("a directive next to a component and PHP in the same view", { skip }, async () => {
+  const t = await tokenize(['<Card title="List">', '@forelse ($items as $i):', '  <Btns.Button label={"n-$i"} />', '@empty', '  <?php echo 1; ?>', '@endforelse', '</Card>'].join("\n"));
+  assert.ok(has(find(t, "forelse"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "empty"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "Button"), "entity.name.tag.component.cast"));
+  assert.equal(find(t, "Card").length, 2);
+});
+
+test("@css highlights as CSS and supports @{ } holes", { skip }, async () => {
+  const t = await tokenize(`@css(
+.list-group {
+  width: 100%;
+}
+li.active {
+  border-color: @{ props['role'] === 'admin' ? '#fff' : '#666' };
+}
+)`);
+  assert.ok(has(find(t, "css"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "list-group"), "entity.other.attribute-name.class.css"));
+  assert.ok(has(find(t, "width"), "support.type.property-name.css"));
+  assert.ok(has(find(t, "border-color"), "support.type.property-name.css"));
+  assert.ok(has(find(t, "role"), "meta.directive.echo.cast"));
+  assert.ok(has(find(t, "role"), "meta.embedded.expression.cast"));
+});
+
+test("@script and @js highlight as JavaScript", { skip }, async () => {
+  const t = await tokenize(`@js(
+handleEvent('click', '.btn', (e, el) => {
+  const id = el.dataset.id;
+});
+)`);
+  assert.ok(has(find(t, "js"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "click"), "string.quoted.single.js"));
+  assert.ok(has(find(t, "const"), "storage.type.js"));
+});
+
+test("a directive's parentheses are bold/colored the same as its keyword (Blade-style), for every directive family", { skip }, async () => {
+  const alt = await tokenize("@foreach ($users as $user) x @endforeach");
+  assert.ok(has(find(alt, "("), "keyword.control.directive.cast"), "@foreach's opening paren");
+  assert.ok(has(find(alt, ")"), "keyword.control.directive.cast"), "@foreach's closing paren");
+
+  const map = await tokenize("@map($items, ($item) => $item)");
+  assert.ok(has(find(map, "("), "keyword.control.directive.cast"), "@map's opening paren");
+  assert.ok(has(find(map, ")").filter((s) => !s.includes("meta.embedded")), "keyword.control.directive.cast"), "@map's own closing paren, not a nested one");
+
+  const filter = await tokenize("@filter($items, ($item) => true)");
+  assert.ok(has(find(filter, "("), "keyword.control.directive.cast"), "@filter's opening paren");
+
+  const css = await tokenize("@css(\n.a { color: red; }\n)");
+  assert.ok(has(find(css, "("), "keyword.control.directive.cast"), "@css's opening paren");
+  assert.ok(has(find(css, ")"), "keyword.control.directive.cast"), "@css's closing paren");
+
+  const script = await tokenize("@script(\nconsole.log(1);\n)");
+  assert.ok(has(find(script, "("), "keyword.control.directive.cast"), "@script's opening paren");
+});
+
+test("@css/@js/@scripts/@styles/@map/@filter (and the fluent .filter()/.map() chain) carry a dedicated styled scope, distinct from plain control-flow directives like @if, so a theme can give them their own bold/italic/underline/accent-colored-brackets treatment without affecting @if/@foreach/@switch", { skip }, async () => {
+  const styledWord = "keyword.control.directive.styled.cast";
+  const scopeOpen = "punctuation.section.directive.scope.begin.cast";
+  const scopeClose = "punctuation.section.directive.scope.end.cast";
+
+  const css = await tokenize("@css(\n.a { color: red; }\n)");
+  assert.ok(has(find(css, "css"), styledWord));
+  assert.ok(has(find(css, "("), scopeOpen));
+  assert.ok(has(find(css, ")"), scopeClose));
+
+  const script = await tokenize("@script(\nconsole.log(1);\n)");
+  assert.ok(has(find(script, "script"), styledWord));
+  assert.ok(has(find(script, "("), scopeOpen));
+
+  const map = await tokenize("@map($items, ($item) => $item)");
+  assert.ok(has(find(map, "map"), styledWord));
+  assert.ok(has(find(map, "("), scopeOpen));
+
+  const filter = await tokenize("@filter($items, ($item) => true)");
+  assert.ok(has(find(filter, "filter"), styledWord));
+
+  assert.ok(has(find(await tokenize("@scripts"), "scripts"), styledWord), "@scripts (bare, no parens) still gets the styled word scope");
+  assert.ok(has(find(await tokenize("@styles"), "styles"), styledWord));
+
+  const chain = await tokenize("@$items.filter(($i) => $i->active).map(($i) => $i->name)");
+  assert.ok(has(find(chain, "filter"), styledWord), "the fluent chain's .filter( gets the same styled scope");
+  assert.ok(has(find(chain, "map"), styledWord), "...and its .map(");
+  assert.equal(find(chain, "(").filter((s) => has([s], scopeOpen)).length, 2, "both segments' own opening parens are accented");
+
+  const ifTok = await tokenize("@if ($x) y @endif");
+  assert.ok(!has(find(ifTok, "if"), styledWord), "@if is a plain control-flow directive, not part of this styled set");
+  assert.ok(!has(find(ifTok, "("), scopeOpen), "@if's own parens are not accented either");
+  assert.ok(has(find(ifTok, "if"), "keyword.control.directive.cast"), "but @if still keeps its original scope, unaffected");
+});
+
+test("@props{ ... } gets the same styled-keyword/accented-brace treatment as @css/@map, and its body highlights as real PHP (type keywords, variables)", { skip }, async () => {
+  const styledWord = "keyword.control.directive.styled.cast";
+  const braceOpen = "punctuation.section.directive.scope.begin.cast";
+  const braceClose = "punctuation.section.directive.scope.end.cast";
+
+  const t = await tokenize("@props{\nstring $tag = 'button';\nbool $disabled = false;\n}\n<button></button>");
+  assert.ok(has(find(t, "props"), styledWord), "the props keyword itself is styled");
+  assert.ok(has(find(t, "{"), braceOpen), "the opening brace is accented");
+  assert.ok(has(find(t, "}"), braceClose), "the closing brace is accented");
+  assert.ok(has(find(t, "string"), "storage.type.php"), "the body is real PHP to the grammar - a type keyword highlights as one");
+  assert.ok(has(find(t, "button"), "meta.directive.props.cast"), "the whole block, including a default's string literal, is under the directive's own scope");
+});
+
+test("@props{ ... } with a nullable `?Type` entry: the closing } still ends the directive correctly (regression - php.tmLanguage.json treats a bare leading ? as the start of a ternary outside a real parameter list, which never finds its own ':' and silently swallows everything after it, including this directive's own closing brace and every real PHP brace in the rest of the file, unless ?Type is matched explicitly first)", { skip }, async () => {
+  const braceClose = "punctuation.section.directive.scope.end.cast";
+
+  const t = await tokenize("@props{\nstring $a = 'x';\n?string $b = null;\nstring $c = 'y';\n};\n<?php if (true) { echo 1; } ?>");
+  const closers = find(t, "}");
+  assert.ok(has([closers[0]], braceClose), "the directive's own closing } (right after $c's entry) ends it, not later");
+  assert.ok(has([closers[1]], "punctuation.definition.end.bracket.curly.php"), "a real PHP brace afterwards is back to plain PHP scoping, not still inside the directive");
+});
+
+test("@props extends::Dotted.Path{ ... }: extends is styled like the props keyword, :: is its own accessor scope, and the dotted path is scoped like a component reference", { skip }, async () => {
+  const styledWord = "keyword.control.directive.styled.cast";
+  const componentRef = "entity.name.tag.component.cast";
+
+  const t = await tokenize("@props extends::Btns.Btn{\nstring $margin = 'mx-1';\n}\n<div></div>");
+  assert.ok(has(find(t, "props"), styledWord), "the props keyword itself is still styled");
+  assert.ok(has(find(t, "extends"), styledWord), "extends gets the same styled treatment");
+  assert.ok(has(find(t, "::"), "punctuation.accessor.cast"));
+  assert.ok(has(find(t, "Btns.Btn"), componentRef), "the dotted path (captured as one span, same as a single @word directive argument) reads as a component reference");
+  assert.ok(has(find(t, "margin"), "variable.other.php"), "the body past the extends:: prefix is still real PHP");
+});
+
+test("@map and expressions support HTML tags and @{ } echo inside callbacks", { skip }, async () => {
+  const t = await tokenize(`@map($items, ($item, $i) => (
+  <li class="list-group-item">
+    <tr>
+      <td>@{ $item['id'] }</td>
+    </tr>
+  </li>
+))`);
+  assert.ok(has(find(t, "map"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "li"), "entity.name.tag.html"));
+  assert.ok(has(find(t, "tr"), "entity.name.tag.html"));
+  assert.ok(has(find(t, "td"), "entity.name.tag.html"));
+  assert.ok(has(find(t, "class"), "entity.other.attribute-name.cast"));
+  assert.ok(has(find(t, "item"), "meta.directive.echo.cast"));
+});

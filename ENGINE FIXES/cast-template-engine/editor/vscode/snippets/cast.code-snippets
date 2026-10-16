@@ -1,0 +1,274 @@
+{
+  "Cast component": {
+    "prefix": "ccomp",
+    "scope": "php,html",
+    "body": [
+      "<${1:Card} ${2:title=\"$3\"}>",
+      "\t$0",
+      "</${1:Card}>"
+    ],
+    "description": "A component with children"
+  },
+  "Cast self-closing component": {
+    "prefix": "ccomp1",
+    "scope": "php,html",
+    "body": "<${1:Btns.Button} ${2:label=\"$3\"} />",
+    "description": "A self-closing component"
+  },
+  "Cast slot": {
+    "prefix": "cslot",
+    "scope": "php,html",
+    "body": [
+      "<Slot name=\"${1:left}\">",
+      "\t$0",
+      "</Slot>"
+    ],
+    "description": "A named slot inside a component"
+  },
+  "Cast prop expression": {
+    "prefix": "cprop",
+    "scope": "php,html",
+    "body": "${1:total}={${2:\\$value}}",
+    "description": "A prop whose value is a PHP expression"
+  },
+  "Cast foreach": {
+    "prefix": "cfor",
+    "scope": "php,html",
+    "body": [
+      "<?php foreach (${1:\\$items} as ${2:\\$item}) : ?>",
+      "\t$0",
+      "<?php endforeach ?>"
+    ],
+    "description": "foreach with the template alternative syntax"
+  },
+  "Cast if": {
+    "prefix": "cif",
+    "scope": "php,html",
+    "body": [
+      "<?php if (${1:\\$condition}) : ?>",
+      "\t$0",
+      "<?php endif ?>"
+    ],
+    "description": "if with the template alternative syntax"
+  },
+  "Cast page shell": {
+    "prefix": "cpage",
+    "scope": "php,html",
+    "body": [
+      "<?php",
+      "__includes('layouts.header', \\$data);",
+      "__includes('${1:parent}.partials.' . \\$data['pageName'], \\$data);",
+      "__includes('layouts.footer', \\$data);"
+    ],
+    "description": "The shell of a page: header, content partial, footer"
+  },
+  "Cast include": {
+    "prefix": "cinc",
+    "scope": "php,html",
+    "body": "<?php __includes('${1:layouts.header}', \\$data); ?>",
+    "description": "Include a partial or layout"
+  },
+  "Cast modules": {
+    "prefix": "cmod",
+    "scope": "php,html",
+    "body": "<?= __modules(\"\\$parentName.\\$pageName\", '${1|css,js|}') ?>",
+    "description": "Link the page's css or js module"
+  },
+  "Cast @foreach": {
+    "prefix": "aforeach",
+    "body": [
+      "@foreach ($${1:items} as $${2:item})",
+      "\t$0",
+      "@endforeach"
+    ],
+    "description": "@foreach ... @endforeach (template engine 1.1.0)"
+  },
+  "Cast @forelse": {
+    "prefix": "aforelse",
+    "body": [
+      "@forelse ($${1:items} as $${2:item})",
+      "\t$0",
+      "@empty",
+      "\t${3:<p>Nothing here.</p>}",
+      "@endforelse"
+    ],
+    "description": "@forelse ... @empty ... @endforelse"
+  },
+  "Cast @if": {
+    "prefix": "aif",
+    "body": [
+      "@if (${1:$condition})",
+      "\t$0",
+      "@endif"
+    ],
+    "description": "@if ... @endif"
+  },
+  "Cast @if/@else": {
+    "prefix": "aifelse",
+    "body": [
+      "@if (${1:$condition})",
+      "\t$0",
+      "@else",
+      "\t",
+      "@endif"
+    ],
+    "description": "@if ... @else ... @endif"
+  },
+  "Cast @for": {
+    "prefix": "afor",
+    "body": [
+      "@for ($${1:i} = 0; $${1:i} < ${2:10}; $${1:i}++)",
+      "\t$0",
+      "@endfor"
+    ],
+    "description": "@for ... @endfor"
+  },
+  "Cast @while": {
+    "prefix": "awhile",
+    "body": [
+      "@while (${1:$condition})",
+      "\t$0",
+      "@endwhile"
+    ],
+    "description": "@while ... @endwhile"
+  },
+  "Cast @switch": {
+    "prefix": "aswitch",
+    "body": [
+      "@switch ($${1:value})",
+      "\t@case (${2:1})",
+      "\t\t$0",
+      "\t\t@break",
+      "\t@default",
+      "\t\t",
+      "@endswitch"
+    ],
+    "description": "@switch / @case / @default"
+  },
+  "Cast @{ }": {
+    "prefix": "aecho",
+    "body": [
+      "@{ $0 }"
+    ],
+    "description": "print a PHP expression (same as <?= ?>)"
+  },
+  "Cast @map": {
+    "prefix": "amap",
+    "body": [
+      "@map($${1:items}, ($${2:item}, $${3:i}) => return (",
+      "\t<${4:Card} key={$${3:i}}>",
+      "\t\t$0",
+      "\t</${4:Card}>",
+      "))"
+    ],
+    "description": "@map collection rendering with key"
+  },
+  "Cast @$items.map": {
+    "prefix": "amapobj",
+    "body": [
+      "@$${1:items}.map(($${2:item}, $${3:i}) => return (",
+      "\t<${4:Card} key={$${3:i}}>",
+      "\t\t$0",
+      "\t</${4:Card}>",
+      "))"
+    ],
+    "description": "@$items.map(...) collection rendering with key"
+  },
+  "Cast @filter": {
+    "prefix": "afilter",
+    "body": [
+      "@filter($${1:items}, ($${2:item}) => $${2:item}->${3:quantity} > 0)"
+    ],
+    "description": "@filter standalone in-place collection filter"
+  },
+  "Cast @filter with map": {
+    "prefix": "afiltermap",
+    "body": [
+      "@filter($${1:items}, ($${2:item}) => $${2:item}->${3:quantity} > 0, ($${2:item}, $${4:i}) => return (",
+      "\t<${5:Card} key={$${4:i}}>",
+      "\t\t$0",
+      "\t</${5:Card}>",
+      "))"
+    ],
+    "description": "@filter collection with render callback"
+  },
+  "Cast chained filter and map": {
+    "prefix": "achain",
+    "body": [
+      "@$${1:items}.filter(($${2:item}) => $${2:item}->${3:quantity} > 0).map(($${2:item}, $${4:i}) => return (",
+      "\t<${5:Card} key={$${4:i}}>",
+      "\t\t$0",
+      "\t</${5:Card}>",
+      "))"
+    ],
+    "description": "@$items.filter(...).map(...) fluent method chaining"
+  },
+  "Cast @cast": {
+    "prefix": "acast",
+    "body": [
+      "@cast(<${1:p}>$0</${1:p}>)"
+    ],
+    "description": "Render compiled Cast markup inside expressions"
+  },
+  "Cast array_map": {
+    "prefix": "aarraymap",
+    "body": [
+      "@{array_map(function($${1:key}, $${2:value}) {",
+      "\treturn \"<p>@{ $${1:key} }: @{ $${2:value} }</p>\";",
+      "}, array_keys($${3:items}), $${3:items})}"
+    ],
+    "description": "Native PHP array_map expression"
+  },
+  "Cast @script": {
+    "prefix": "ascript",
+    "body": [
+      "@script(",
+      "\thandleEvent('${1:click}', '${2:.item}', (e, el) => {",
+      "\t\t$0",
+      "\t});",
+      ")"
+    ],
+    "description": "@script(...) component client-side logic"
+  },
+  "Cast @js": {
+    "prefix": "ajs",
+    "body": [
+      "@js(",
+      "\thandleEvent('${1:click}', '${2:.item}', (e, el) => {",
+      "\t\t$0",
+      "\t});",
+      ")"
+    ],
+    "description": "@js(...) alias for component script"
+  },
+  "Cast @css": {
+    "prefix": "acss",
+    "body": [
+      "@css(",
+      "\t${1:li.active} {",
+      "\t\t${2:border-color}: @{ ${3:props['role'] === 'admin' ? '#fff' : '#666'} };",
+      "\t}",
+      ")"
+    ],
+    "description": "@css(...) scoped component styles with dynamic CSS variables"
+  },
+  "Cast @scripts": {
+    "prefix": "ascripts",
+    "body": "@scripts",
+    "description": "@scripts output tag before </body>"
+  },
+  "Cast @styles": {
+    "prefix": "astyles",
+    "body": "@styles",
+    "description": "@styles output tag for collected component styles"
+  },
+  "Cast handleEvent": {
+    "prefix": "aevent",
+    "body": [
+      "handleEvent('${1:click}', '${2:.item}', (e, el) => {",
+      "\t$0",
+      "});"
+    ],
+    "description": "handleEvent delegated event listener"
+  }
+}
