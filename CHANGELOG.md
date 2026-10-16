@@ -2,6 +2,29 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 2.1.0
+
+- **Unified editor installer (`engine:editor-install` / `-update` / `-uninstall`)**: installs the VS Code
+  extension AND the global `cast-language-server` in one command, with a requirements check (PHP, Node.js,
+  npm, PHP extensions, PHPactor) printed up front.
+  - `php cast engine:editor-install [all|extension|lsp]` — target just the extension, just the LSP server,
+    or both (default).
+  - Per-editor boolean flags (`--cursor`, `--vscode`, `--antigravity-ide`, ...) select one or more editors
+    at once, instead of a single `--editor=name`; omitting them auto-detects, same as before.
+  - `cast-language-server` is installed **globally** via `npm install -g`, so it's resolvable from any
+    project afterward, not just the one it was built from.
+  - Missing PHPactor (`editor/server/bin/phpactor.phar`) now prompts to download a pinned,
+    checksum-verified release automatically (`--yes`/`-y` to auto-confirm, `--no-phpactor` to skip) —
+    it's optional; the server and extension work fully without it, only PHP-aware bridging is disabled.
+  - `--dry-run` prints the full plan (requirements, targets, commands) without changing anything.
+  - The original `engine:editor install|update|uninstall` command is unchanged and still works standalone.
+- **VS Code extension now actually launches the language server**: `extension.js` gained real
+  `vscode-languageclient` wiring (previously only in the README, not the code) behind
+  `cast.languageServer.enable`/`cast.languageServer.path`, resolving `cast-language-server` on PATH and
+  starting it over stdio. Missing the client library or the server binary degrades to a one-time
+  informational toast — every existing hand-rolled provider (hover, completion, definition, formatting,
+  diagnostics) keeps working unchanged either way.
+
 ## 2.0.0
 
 - **Dedicated Cast Language Server (`cast-language-server`, TypeScript)**:
