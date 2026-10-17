@@ -22,7 +22,7 @@ function project(files, settings = {}) {
   delete require.cache[require.resolve("../extension")];
   const extension = require("../extension");
   Module._load = original;
-  extension.activate({ subscriptions: [] });
+  extension.activate({ subscriptions: [], globalState: vscode.globalState });
   return { root, providers: vscode.providers, extension, vscode, handlers: vscode.handlers, applied: vscode.applied };
 }
 
@@ -272,6 +272,26 @@ test("typing: a line that becomes </div>, <?php endif ?> or @endif moves back by
   assert.equal(off.applied.length, 0, "the setting turns it off");
 });
 
+test("the missing-server notice shows once per workspace and is remembered across activations (globalState)", () => {
+  const { vscode } = project({});
+  assert.equal(vscode.messages.length, 1, "activate() shows the one-time notice when the language client can't start");
+  assert.match(vscode.messages[0], /language server|cast-language-server/);
+
+  // a second activation (e.g. a window reload) must not show it again - the whole point of globalState
+  const vscode2 = require("./mock-vscode").create({ root: undefined });
+  vscode2.globalState = vscode.globalState; // same persisted store, as a real VS Code window reload would have
+  const original = require("node:module")._load;
+  require("node:module")._load = function (request, ...rest) {
+    return request === "vscode" ? vscode2 : original.call(this, request, ...rest);
+  };
+  delete require.cache[require.resolve("../extension")];
+  const extension2 = require("../extension");
+  require("node:module")._load = original;
+  extension2.activate({ subscriptions: [], globalState: vscode2.globalState });
+
+  assert.equal(vscode2.messages.length, 0, "already shown once; globalState remembers that across activations");
+});
+
 test("EmbeddedDiagnostics.refresh maps CSS/JS provider diagnostics onto the real document, tagged cast-css/cast-javascript", async () => {
   const { extension, vscode } = project({});
   const { Range: MockRange, Position: MockPosition } = require("./mock-vscode");
@@ -304,7 +324,7 @@ test("EmbeddedDiagnostics.refresh publishes nothing (and never throws) when the 
   delete require.cache[require.resolve("../extension")];
   const extension = require("../extension");
   require("node:module")._load = original;
-  extension.activate({ subscriptions: [] });
+  extension.activate({ subscriptions: [], globalState: vscode.globalState });
 
   const collection = vscode.languages.createDiagnosticCollection("cast-embedded");
   const embedded = new extension.EmbeddedDiagnostics(collection);

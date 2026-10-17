@@ -44,7 +44,7 @@ function project(files, settings = {}) {
   for (const key of Object.keys(require.cache)) if (/editor[\\/]vscode[\\/](extension|lib)/.test(key)) delete require.cache[key];
   const extension = require("../extension");
   Module._load = original;
-  extension.activate({ subscriptions: [] });
+  extension.activate({ subscriptions: [], globalState: vscode.globalState });
   const view = path.join(root, "resources/views/page.cast.php");
   return { root, vscode, extension, providers: vscode.providers, view, where: extension.locations(document(view, "")) };
 }

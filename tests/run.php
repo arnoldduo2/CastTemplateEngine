@@ -684,6 +684,26 @@ test('editor/spec/cast-syntax.json stays up to date with Directives and Props', 
     }
 });
 
+test('EngineEditorInstallCommand::stageLanguageCore copies editor/language-core as a sibling of the installed extension', function () {
+    $tmp = sys_get_temp_dir() . '/cast-stage-core-' . getmypid() . '-' . mt_rand();
+    $extensionDir = "$tmp/extensions/anode.cast-vscode-2.1.2";
+    @mkdir($extensionDir, 0777, true);
+
+    try {
+        \CastTemplateEngine\Console\Commands\EngineEditorInstallCommand::stageLanguageCore($extensionDir);
+
+        $staged = "$tmp/extensions/language-core";
+        if (!is_file("$staged/package.json")) {
+            throw new Exception('language-core/package.json was not staged as a sibling of the extension directory');
+        }
+        if (!is_file("$staged/dist/index.js")) {
+            throw new Exception('language-core/dist/index.js was not staged');
+        }
+    } finally {
+        \CastTemplateEngine\Console\Commands\EngineEditorCommand::removeDirectory($tmp);
+    }
+});
+
 echo $failures ? "\n$failures failed\n" : "\nall passed\n";
 exit($failures ? 1 : 0);
 

@@ -65,7 +65,7 @@ final class EngineEditorCommand implements CommandInterface
                     continue;
                 }
                 echo "[Cast Engine] Removing from {$editorName} ({$targetDir})...\n";
-                $this->removeDirectory($targetDir);
+                self::removeDirectory($targetDir);
                 echo "  \033[32m✔\033[0m Uninstalled successfully from {$editorName}.\n";
             }
 
@@ -79,7 +79,7 @@ final class EngineEditorCommand implements CommandInterface
 
         foreach ($targets as $editorName => $targetDir) {
             echo "[Cast Engine] Installing to {$editorName} ({$targetDir})...\n";
-            $this->copyDirectory($editorDir, $targetDir);
+            self::copyDirectory($editorDir, $targetDir);
             echo "  \033[32m✔\033[0m Installed successfully to {$editorName}.\n";
         }
 
@@ -128,7 +128,8 @@ final class EngineEditorCommand implements CommandInterface
         return EditorLocator::resolve($home, $extensionId, $requestedEditors);
     }
 
-    private function removeDirectory(string $dir): void
+    /** Shared with EngineEditorInstallCommand, which stages editor/language-core the same way. */
+    public static function removeDirectory(string $dir): void
     {
         $handle = opendir($dir);
         if (!$handle) return;
@@ -139,7 +140,7 @@ final class EngineEditorCommand implements CommandInterface
             }
             $path = $dir . DIRECTORY_SEPARATOR . $file;
             if (is_dir($path)) {
-                $this->removeDirectory($path);
+                self::removeDirectory($path);
             } else {
                 @unlink($path);
             }
@@ -149,7 +150,8 @@ final class EngineEditorCommand implements CommandInterface
         @rmdir($dir);
     }
 
-    private function copyDirectory(string $src, string $dst): void
+    /** Shared with EngineEditorInstallCommand, which stages editor/language-core the same way. */
+    public static function copyDirectory(string $src, string $dst): void
     {
         if (!is_dir($dst)) {
             @mkdir($dst, 0777, true);
@@ -166,7 +168,7 @@ final class EngineEditorCommand implements CommandInterface
             $dstPath = $dst . DIRECTORY_SEPARATOR . $file;
 
             if (is_dir($srcPath)) {
-                $this->copyDirectory($srcPath, $dstPath);
+                self::copyDirectory($srcPath, $dstPath);
             } else {
                 @copy($srcPath, $dstPath);
             }

@@ -232,6 +232,8 @@ final class EngineEditorInstallCommand implements CommandInterface
                 continue;
             }
 
+            self::stageLanguageCore($dir);
+
             echo "    Installing extension runtime dependencies for {$name}...\n";
             $hasLockfile = is_file($dir . DIRECTORY_SEPARATOR . 'package-lock.json');
             $npmArgs = $hasLockfile ? ['npm', 'ci', '--omit=dev'] : ['npm', 'install', '--omit=dev'];
@@ -243,6 +245,24 @@ final class EngineEditorInstallCommand implements CommandInterface
                 echo "    \033[33m!\033[0m Could not install language client dependencies for {$name} — the extension will still work, just without live LSP features.\n";
             }
         }
+    }
+
+    /**
+     * Stages editor/language-core as a sibling of the installed extension directory, since the extension's own
+     * package.json depends on it as `file:../language-core` - a relative path that only resolves when something
+     * real sits at that sibling location. copyDirectory() skips node_modules/test/.git, so this is a plain copy
+     * of language-core's own source + built dist/, which npm then links from when installing the extension's
+     * other runtime dependencies (vscode-languageclient) right after this runs.
+     */
+    public static function stageLanguageCore(string $extensionDir): void
+    {
+        $src = RequirementsChecker::languageCoreDir();
+        if ($src === '') {
+            return;
+        }
+
+        $dst = dirname($extensionDir) . DIRECTORY_SEPARATOR . 'language-core';
+        EngineEditorCommand::copyDirectory($src, $dst);
     }
 
     /**

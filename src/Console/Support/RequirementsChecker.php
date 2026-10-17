@@ -179,6 +179,11 @@ final class RequirementsChecker
         return (string) realpath(__DIR__ . '/../../../editor/server');
     }
 
+    public static function languageCoreDir(): string
+    {
+        return (string) realpath(__DIR__ . '/../../../editor/language-core');
+    }
+
     public static function phpactorPharPath(): string
     {
         return self::serverDir() . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'phpactor.phar';

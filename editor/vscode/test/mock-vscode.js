@@ -131,6 +131,14 @@ function create({ root, settings = {} }) {
   const collections = {};
   const handlers = {};
   const applied = [];
+  const messages = [];
+  const globalStateStore = new Map();
+  const globalState = {
+    get: (key) => globalStateStore.get(key),
+    update: (key, value) => {
+      globalStateStore.set(key, value);
+    },
+  };
   const api = {
     Position,
     Range,
@@ -144,6 +152,9 @@ function create({ root, settings = {} }) {
     collections,
     handlers,
     applied,
+    messages,
+    globalState,
+    window: { showInformationMessage: (message) => { messages.push(message); } },
     commands: { registerCommand: (id, fn) => ((handlers[id] = fn), { dispose() {} }), executeCommand: async () => undefined },
     CompletionItem,
     CompletionItemKind: { Class: 6, Property: 9, EnumMember: 19, Field: 4 },
