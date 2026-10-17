@@ -22,6 +22,7 @@ import { HoverProvider } from './features/hover.js';
 import { DefinitionProvider } from './features/definition.js';
 import { DocumentLinksProvider } from './features/documentLinks.js';
 import { FormattingProvider } from './features/formatting.js';
+import { PhpDelegation } from './features/phpDelegation.js';
 import { PhpEngineManager } from './php/engine.js';
 import { PhpactorClient } from './php/phpactorClient.js';
 import { PhpRouter } from './php/phpRouter.js';
@@ -44,6 +45,7 @@ const documentLinksProvider = new DocumentLinksProvider(projectIndex);
 const formattingProvider = new FormattingProvider();
 const phpEngineManager = new PhpEngineManager();
 let phpRouter: PhpRouter | null = null;
+let phpDelegation: PhpDelegation | null = null;
 
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
   // Collect workspace roots
@@ -66,8 +68,10 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
       const phpactor = new PhpactorClient({ command: engineStatus.command, args: engineStatus.args });
       await phpactor.start(roots);
       phpRouter = new PhpRouter(phpactor);
+      phpDelegation = new PhpDelegation(phpactor);
     } catch (error) {
       phpRouter = null;
+      phpDelegation = null;
       if (phpEngineManager.shouldNotify()) {
         connection.sendNotification(ShowMessageNotification.type, {
           type: MessageType.Warning,
@@ -91,6 +95,7 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
       },
       hoverProvider: true,
       definitionProvider: true,
+      signatureHelpProvider: { triggerCharacters: ['(', ','] },
       documentLinkProvider: {
         resolveProvider: false
       },
@@ -148,24 +153,35 @@ connection.onDidChangeWatchedFiles(params => {
 });
 
 // Completion
-connection.onCompletion(params => {
+connection.onCompletion(async params => {
   const doc = parsedDocs.get(params.textDocument.uri);
   if (!doc) return [];
+  const delegated = phpDelegation ? await phpDelegation.completion(doc, params.position) : null;
+  if (delegated) return delegated;
   return completionProvider.getCompletions(doc, params.position);
 });
 
 // Hover
-connection.onHover(params => {
+connection.onHover(async params => {
   const doc = parsedDocs.get(params.textDocument.uri);
   if (!doc) return null;
+  const delegated = phpDelegation ? await phpDelegation.hover(doc, params.position) : null;
+  if (delegated) return delegated;
   return hoverProvider.getHover(doc, params.position);
 });
 
 // Definition
-connection.onDefinition(params => {
+connection.onDefinition(async params => {
   const doc = parsedDocs.get(params.textDocument.uri);
   if (!doc) return null;
+  const delegated = phpDelegation ? await phpDelegation.definition(doc, params.position) : null;
+  if (delegated) return delegated;
   return definitionProvider.getDefinition(doc, params.position);
+});
+
+connection.onSignatureHelp(async params => {
+  const doc = parsedDocs.get(params.textDocument.uri);
+  return doc && phpDelegation ? phpDelegation.signatureHelp(doc, params.position) : null;
 });
 
 // Document Links

@@ -1,0 +1,28 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildEmbeddedVirtuals = exports.buildPhpVirtual = exports.SourceMap = exports.firstMarkupOffset = exports.analyzeCast = void 0;
+__exportStar(require("./types.js"), exports);
+var regions_js_1 = require("./regions.js");
+Object.defineProperty(exports, "analyzeCast", { enumerable: true, get: function () { return regions_js_1.analyzeCast; } });
+Object.defineProperty(exports, "firstMarkupOffset", { enumerable: true, get: function () { return regions_js_1.firstMarkupOffset; } });
+var sourceMap_js_1 = require("./sourceMap.js");
+Object.defineProperty(exports, "SourceMap", { enumerable: true, get: function () { return sourceMap_js_1.SourceMap; } });
+var virtualPhp_js_1 = require("./virtualPhp.js");
+Object.defineProperty(exports, "buildPhpVirtual", { enumerable: true, get: function () { return virtualPhp_js_1.buildPhpVirtual; } });
+var virtualEmbedded_js_1 = require("./virtualEmbedded.js");
+Object.defineProperty(exports, "buildEmbeddedVirtuals", { enumerable: true, get: function () { return virtualEmbedded_js_1.buildEmbeddedVirtuals; } });
+//# sourceMappingURL=index.js.map
