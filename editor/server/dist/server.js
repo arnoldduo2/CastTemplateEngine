@@ -14,6 +14,8 @@ const definition_js_1 = require("./features/definition.js");
 const documentLinks_js_1 = require("./features/documentLinks.js");
 const formatting_js_1 = require("./features/formatting.js");
 const engine_js_1 = require("./php/engine.js");
+const phpactorClient_js_1 = require("./php/phpactorClient.js");
+const phpRouter_js_1 = require("./php/phpRouter.js");
 // Create connection
 const connection = (0, node_js_1.createConnection)(node_js_1.ProposedFeatures.all);
 const documents = new node_js_1.TextDocuments(vscode_languageserver_textdocument_1.TextDocument);
@@ -29,6 +31,7 @@ const definitionProvider = new definition_js_1.DefinitionProvider(projectIndex);
 const documentLinksProvider = new documentLinks_js_1.DocumentLinksProvider(projectIndex);
 const formattingProvider = new formatting_js_1.FormattingProvider();
 const phpEngineManager = new engine_js_1.PhpEngineManager();
+let phpRouter = null;
 connection.onInitialize(async (params) => {
     // Collect workspace roots
     const roots = [];
@@ -44,6 +47,22 @@ connection.onInitialize(async (params) => {
     await projectIndex.indexAll();
     // Check PHP runtime
     const engineStatus = phpEngineManager.resolve();
+    if (engineStatus.status === 'ready' && engineStatus.command && engineStatus.args) {
+        try {
+            const phpactor = new phpactorClient_js_1.PhpactorClient({ command: engineStatus.command, args: engineStatus.args });
+            await phpactor.start(roots);
+            phpRouter = new phpRouter_js_1.PhpRouter(phpactor);
+        }
+        catch (error) {
+            phpRouter = null;
+            if (phpEngineManager.shouldNotify()) {
+                connection.sendNotification(node_js_1.ShowMessageNotification.type, {
+                    type: node_js_1.MessageType.Warning,
+                    message: `[Cast LSP] Phpactor could not start: ${error instanceof Error ? error.message : 'unknown error'}. Cast diagnostics remain active.`
+                });
+            }
+        }
+    }
     if (engineStatus.status !== 'ready' && phpEngineManager.shouldNotify()) {
         connection.sendNotification(node_js_1.ShowMessageNotification.type, {
             type: node_js_1.MessageType.Info,
@@ -67,11 +86,19 @@ connection.onInitialize(async (params) => {
     };
 });
 // Document parsing and diagnostics update
-function validateDocument(document) {
+async function validateDocument(document) {
     const uri = document.uri;
     const doc = parser.parse(uri, document.getText(), document.version);
     parsedDocs.set(uri, doc);
     const diagnostics = diagnosticsManager.getFastDiagnostics(doc);
+    if (phpRouter) {
+        try {
+            diagnostics.push(...await phpRouter.getDiagnostics(doc));
+        }
+        catch {
+            // Phpactor failures are deliberately non-fatal: Cast validation remains live.
+        }
+    }
     connection.sendDiagnostics({
         uri,
         diagnostics: diagnostics.map(d => ({
@@ -84,7 +111,7 @@ function validateDocument(document) {
     });
 }
 documents.onDidChangeContent(change => {
-    validateDocument(change.document);
+    void validateDocument(change.document);
 });
 documents.onDidClose(e => {
     parsedDocs.delete(e.document.uri);

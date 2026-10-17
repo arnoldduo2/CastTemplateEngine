@@ -5,6 +5,8 @@ import { execSync } from 'child_process';
 export interface PhpEngineResolution {
   phpPath: string | null;
   phpactorPath: string | null;
+  command?: string;
+  args?: string[];
   status: 'ready' | 'missing-php' | 'missing-phpactor' | 'disabled';
   reason?: string;
 }
@@ -43,6 +45,8 @@ export class PhpEngineManager {
     this.resolution = {
       phpPath,
       phpactorPath,
+      command: phpPath,
+      args: [phpactorPath, 'language-server'],
       status: 'ready'
     };
     return this.resolution;

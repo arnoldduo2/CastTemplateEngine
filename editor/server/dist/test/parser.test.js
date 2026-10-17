@@ -99,5 +99,17 @@ const castParser_js_1 = require("../parser/castParser.js");
         assert.strictEqual(comp.attributes[3].isSpread, true);
         assert.strictEqual(comp.attributes[3].value, '$rest');
     });
+    (0, node_test_1.test)('does not treat PHP docblock markup as markup before @props', () => {
+        const doc = parser.parse('file:///card.cast.php', '<?php /** Renders <Card /> and <a> */ ?>\n@props { string $title; }');
+        assert.strictEqual(doc.diagnostics.some((diagnostic) => diagnostic.message.includes('before any HTML')), false);
+    });
+    (0, node_test_1.test)('tracks only the directive marker in nameRange', () => {
+        const doc = parser.parse('file:///view.cast.php', '@php(testFunction($x))');
+        const directive = doc.directives[0];
+        assert.deepStrictEqual(directive.nameRange, {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 4 }
+        });
+    });
 });
 //# sourceMappingURL=parser.test.js.map

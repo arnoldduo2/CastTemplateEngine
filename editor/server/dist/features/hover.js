@@ -24,7 +24,7 @@ class HoverProvider {
         }
         // 2. Hover on Directive
         for (const d of doc.directives) {
-            if (this.positionInRange(position, d.range)) {
+            if (this.positionInRange(position, d.nameRange)) {
                 return this.getDirectiveHover(d.name);
             }
         }

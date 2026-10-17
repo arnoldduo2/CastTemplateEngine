@@ -67,6 +67,8 @@ class PhpEngineManager {
         this.resolution = {
             phpPath,
             phpactorPath,
+            command: phpPath,
+            args: [phpactorPath, 'language-server'],
             status: 'ready'
         };
         return this.resolution;

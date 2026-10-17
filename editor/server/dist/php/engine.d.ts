@@ -1,6 +1,8 @@
 export interface PhpEngineResolution {
     phpPath: string | null;
     phpactorPath: string | null;
+    command?: string;
+    args?: string[];
     status: 'ready' | 'missing-php' | 'missing-phpactor' | 'disabled';
     reason?: string;
 }

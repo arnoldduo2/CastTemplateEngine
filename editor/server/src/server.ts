@@ -23,6 +23,8 @@ import { DefinitionProvider } from './features/definition.js';
 import { DocumentLinksProvider } from './features/documentLinks.js';
 import { FormattingProvider } from './features/formatting.js';
 import { PhpEngineManager } from './php/engine.js';
+import { PhpactorClient } from './php/phpactorClient.js';
+import { PhpRouter } from './php/phpRouter.js';
 import { CastDocument } from './parser/ast.js';
 
 // Create connection
@@ -41,6 +43,7 @@ const definitionProvider = new DefinitionProvider(projectIndex);
 const documentLinksProvider = new DocumentLinksProvider(projectIndex);
 const formattingProvider = new FormattingProvider();
 const phpEngineManager = new PhpEngineManager();
+let phpRouter: PhpRouter | null = null;
 
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
   // Collect workspace roots
@@ -58,6 +61,21 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
 
   // Check PHP runtime
   const engineStatus = phpEngineManager.resolve();
+  if (engineStatus.status === 'ready' && engineStatus.command && engineStatus.args) {
+    try {
+      const phpactor = new PhpactorClient({ command: engineStatus.command, args: engineStatus.args });
+      await phpactor.start(roots);
+      phpRouter = new PhpRouter(phpactor);
+    } catch (error) {
+      phpRouter = null;
+      if (phpEngineManager.shouldNotify()) {
+        connection.sendNotification(ShowMessageNotification.type, {
+          type: MessageType.Warning,
+          message: `[Cast LSP] Phpactor could not start: ${error instanceof Error ? error.message : 'unknown error'}. Cast diagnostics remain active.`
+        });
+      }
+    }
+  }
   if (engineStatus.status !== 'ready' && phpEngineManager.shouldNotify()) {
     connection.sendNotification(ShowMessageNotification.type, {
       type: MessageType.Info,
@@ -83,12 +101,19 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
 });
 
 // Document parsing and diagnostics update
-function validateDocument(document: TextDocument): void {
+async function validateDocument(document: TextDocument): Promise<void> {
   const uri = document.uri;
   const doc = parser.parse(uri, document.getText(), document.version);
   parsedDocs.set(uri, doc);
 
   const diagnostics = diagnosticsManager.getFastDiagnostics(doc);
+  if (phpRouter) {
+    try {
+      diagnostics.push(...await phpRouter.getDiagnostics(doc));
+    } catch {
+      // Phpactor failures are deliberately non-fatal: Cast validation remains live.
+    }
+  }
   connection.sendDiagnostics({
     uri,
     diagnostics: diagnostics.map(d => ({
@@ -102,7 +127,7 @@ function validateDocument(document: TextDocument): void {
 }
 
 documents.onDidChangeContent(change => {
-  validateDocument(change.document);
+  void validateDocument(change.document);
 });
 
 documents.onDidClose(e => {

@@ -18,7 +18,7 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "test": "node --test dist/test/*.test.js"
+    "test": "node --test dist/test/*.test.js dist/php/test/*.test.js"
   },
   "keywords": [
     "lsp",
@@ -31,6 +31,7 @@
   "license": "MIT",
   "dependencies": {
     "cast-language-core": "file:../language-core",
+    "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver": "^9.0.1",
     "vscode-languageserver-textdocument": "^1.0.12",
     "vscode-uri": "^3.0.8",
