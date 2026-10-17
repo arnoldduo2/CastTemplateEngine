@@ -21,6 +21,15 @@ export declare function computeIndents(lines: string[]): {
     after: number[];
 };
 export declare function indentString(depth: number, { tabSize, insertSpaces }?: FormatOptions): string;
+/**
+ * A doc-comment continuation/closing line (` * text`, the comment's own closing delimiter) gets one extra
+ * alignment space after the normal indent, so its `*` lines up under the second `*` of the comment's own opening
+ * delimiter - the universal JSDoc/PHPDoc convention. Detected purely by the line's own text (starts with a literal
+ * `*` once its old leading whitespace is stripped) - simpler than threading "am I inside a block comment" out of
+ * the scanner, and safe: real PHP/JS code never starts a line with a bare `*` (it is never valid at
+ * statement-start position).
+ */
+export declare function indentPrefix(depth: number, stripped: string, options: FormatOptions): string;
 /** The text with every line re-indented. */
 export declare function formatCast(text: string, options?: FormatOptions): string;
 /** The indentation a line should have, given the lines above it (and itself). null: leave it. */

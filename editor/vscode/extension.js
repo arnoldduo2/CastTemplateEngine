@@ -11,7 +11,7 @@ const { resolveComponent, resolveLegacyComponent, resolveView, resolveModule, pr
 const { lookup, listComponents, findProp, specOf } = require("./lib/components");
 const { contextAt, diagnose } = require("./lib/complete");
 const { camel } = require("./lib/docblock");
-const { computeIndents, indentFor, indentString } = require("./lib/indent");
+const { computeIndents, indentFor, indentPrefix } = require("./lib/indent");
 const {
   findEchoHoles,
   findBraceExpressions,
@@ -244,6 +244,13 @@ const BLOCK_DIAGNOSTIC_SOURCE = { css: "cast-css", script: "cast-javascript", js
 class EmbeddedDiagnostics {
   constructor(collection) {
     this.collection = collection;
+    // virtual uri (string) -> { sourceUri: string, document }: vscode.languages.getDiagnostics(uri) is a pure
+    // read of whatever VS Code's built-in CSS/JS features have already computed - it neither triggers nor waits
+    // for that computation, which runs on its own debounce well after openEmbedded() above resolves. The first
+    // refresh() right after a document opens/changes will almost always see nothing yet. These two maps let
+    // onVirtualDiagnosticsChanged() (wired to languages.onDidChangeDiagnostics in activate()) re-run refresh()
+    // for the right source document once the provider's own result actually lands.
+    this.virtualToSource = new Map();
   }
 
   async refresh(document) {
@@ -255,12 +262,17 @@ class EmbeddedDiagnostics {
 
     const text = document.getText();
     const results = [];
+    const liveVirtualUris = new Set();
     for (const block of findEmbeddedBlocks(text)) {
       const languageId = BLOCK_LANGUAGE[block.kind];
       const ext = BLOCK_EXT[block.kind];
       const vdoc = await openEmbedded(spanKey(document.uri, block.start), ext, buildBlockVirtual(text, block));
       if (!vdoc) continue;
       if (vdoc.languageId !== languageId) await vscode.languages.setTextDocumentLanguage(vdoc, languageId);
+
+      const vUriString = vdoc.uri.toString();
+      liveVirtualUris.add(vUriString);
+      this.virtualToSource.set(vUriString, { sourceUri: document.uri, document });
 
       const source = BLOCK_DIAGNOSTIC_SOURCE[block.kind];
       for (const provided of await this.providerDiagnostics(vdoc.uri)) {
@@ -269,7 +281,21 @@ class EmbeddedDiagnostics {
         results.push(diagnostic);
       }
     }
+    // drop associations for blocks that no longer exist in this document (edited/removed since the last refresh)
+    for (const [vUriString, entry] of this.virtualToSource) {
+      if (entry.sourceUri.toString() === document.uri.toString() && !liveVirtualUris.has(vUriString)) {
+        this.virtualToSource.delete(vUriString);
+      }
+    }
     this.collection.set(document.uri, results);
+  }
+
+  /** Wired to vscode.languages.onDidChangeDiagnostics in activate(): re-runs refresh() for whichever tracked
+   * source document owns `changedUri`, if any. Ignored (not awaited) by its caller, the same way a VS Code event
+   * subscription callback itself cannot be awaited by the event source. */
+  onVirtualDiagnosticsChanged(changedUri) {
+    const entry = this.virtualToSource.get(changedUri.toString());
+    if (entry) this.refresh(entry.document);
   }
 
   /** Whichever diagnostics API this VS Code build exposes for `uri`; [] (never throws) if none is available. */
@@ -789,7 +815,8 @@ function indentEdits(document, options, first = 0, last = Infinity) {
       continue;
     }
     if (depths[i] === null) continue;
-    const wanted = indentString(depths[i], tabOptions(options));
+    const stripped = lines[i].slice(old.length);
+    const wanted = indentPrefix(depths[i], stripped, tabOptions(options));
     if (wanted !== old) edits.push(vscode.TextEdit.replace(new vscode.Range(new vscode.Position(i, 0), new vscode.Position(i, old.length)), wanted));
   }
   return edits;
@@ -968,8 +995,21 @@ function activate(context) {
   if (vscode.EventEmitter && vscode.workspace.registerTextDocumentContentProvider) {
     context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider("cast-embedded", createEmbeddedProvider()));
   }
-  const formatter = new Formatter();
-  if (vscode.languages.registerDocumentFormattingEditProvider) {
+
+  // Started here, before formatter registration below, so `client` (set synchronously inside startLanguageClient,
+  // before the server's own `client.start()` handshake) is known in time to decide which formatter to register.
+  // VS Code can only use one "Format Document" provider per language; registering both this extension's own and
+  // the LSP's (documentFormattingProvider: true) at once makes VS Code prompt the user to pick, and the two could
+  // disagree (see editor/language-core's indentPrefix vs. this file's old direct indentString use). The spec is
+  // explicit: "There must be one owner of indentation."
+  try {
+    startLanguageClient(context);
+  } catch (err) {
+    console.error("[Cast] language client failed to start", err);
+  }
+
+  if (!client && vscode.languages.registerDocumentFormattingEditProvider) {
+    const formatter = new Formatter();
     context.subscriptions.push(
       vscode.languages.registerDocumentFormattingEditProvider(SELECTOR, formatter),
       vscode.languages.registerDocumentRangeFormattingEditProvider(SELECTOR, formatter)
@@ -986,6 +1026,11 @@ function activate(context) {
   // problems are refreshed when a file opens or changes (a short delay while typing), and when settings change
   const embeddedDiagnostics = new EmbeddedDiagnostics(vscode.languages.createDiagnosticCollection("cast-embedded"));
   context.subscriptions.push({ dispose: () => embeddedDiagnostics.collection.dispose && embeddedDiagnostics.collection.dispose() });
+  if (vscode.languages.onDidChangeDiagnostics) {
+    context.subscriptions.push(vscode.languages.onDidChangeDiagnostics((e) => {
+      for (const uri of e.uris) embeddedDiagnostics.onVirtualDiagnosticsChanged(uri);
+    }));
+  }
   const timers = new Map();
   const refresh = (document) => {
     clearTimeout(timers.get(document.uri.fsPath));
@@ -1009,12 +1054,6 @@ function activate(context) {
       vscode.workspace.onDidChangeConfiguration(() => (vscode.workspace.textDocuments || []).forEach(refresh))
     );
     (vscode.workspace.textDocuments || []).forEach(refresh);
-  }
-
-  try {
-    startLanguageClient(context);
-  } catch (err) {
-    console.error("[Cast] language client failed to start", err);
   }
 }
 

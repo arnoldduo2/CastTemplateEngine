@@ -67,8 +67,10 @@ export class PhpDelegation {
     if (!target) return null;
     const result = await this.client.request<PhpDefinition>('textDocument/definition', this.requestParams(target));
     if (!result) return null;
-    const mapOne = (location: Location | LocationLink): Location | LocationLink => this.mapLocation(document, target, location);
-    return Array.isArray(result) ? (result.map(mapOne) as Location[] | LocationLink[]) : (mapOne(result) as Location);
+    const mapOne = (location: Location | LocationLink): Location | LocationLink | null => this.mapLocation(document, target, location);
+    if (!Array.isArray(result)) return mapOne(result) as Location | null;
+    const mapped = result.map(mapOne).filter((location): location is Location | LocationLink => location !== null);
+    return mapped.length ? (mapped as Location[] | LocationLink[]) : null;
   }
 
   public async signatureHelp(document: CastDocument, position: Position): Promise<SignatureHelp | null> {
@@ -99,15 +101,30 @@ export class PhpDelegation {
     return mapped ? Range.create(positionAt(document.text, mapped.start), positionAt(document.text, mapped.end)) : null;
   }
 
-  private mapCompletion(document: CastDocument, target: PhpTarget, item: CompletionItem): CompletionItem {
-    const mapEdit = (edit: TextEdit): TextEdit => ({ ...edit, range: this.toSourceRange(document, target, edit.range) ?? edit.range });
-    const textEdit = item.textEdit
-      ? 'range' in item.textEdit ? mapEdit(item.textEdit) : item.textEdit
-      : undefined;
-    return { ...item, textEdit, additionalTextEdits: item.additionalTextEdits?.map(mapEdit) };
+  /**
+   * Maps an edit's range, or drops the edit (returns null) when the range falls in generated-only virtual text
+   * (buildPhpVirtual's own preamble/control-flow wrappers never map to a source range - see SourceMap.toSourceRange).
+   * A dropped textEdit still leaves the completion item usable via its own insertText/label; a dropped
+   * additionalTextEdit is simply omitted. Applying either at its untranslated virtual-document coordinates would
+   * silently corrupt the real Cast file at an arbitrary offset.
+   */
+  private mapEdit(document: CastDocument, target: PhpTarget, edit: TextEdit): TextEdit | null {
+    const range = this.toSourceRange(document, target, edit.range);
+    return range ? { ...edit, range } : null;
   }
 
-  private mapLocation(document: CastDocument, target: PhpTarget, location: Location | LocationLink): Location | LocationLink {
+  private mapCompletion(document: CastDocument, target: PhpTarget, item: CompletionItem): CompletionItem {
+    const mapped = item.textEdit && 'range' in item.textEdit ? this.mapEdit(document, target, item.textEdit) : item.textEdit;
+    const textEdit = mapped ?? undefined;
+    const additionalTextEdits = item.additionalTextEdits
+      ?.map((edit) => this.mapEdit(document, target, edit))
+      .filter((edit): edit is TextEdit => edit !== null);
+    return { ...item, textEdit, additionalTextEdits };
+  }
+
+  /** Maps a definition result's range, or drops it (returns null) when mapping fails - never returns a Location
+   * still pointing at the virtual `.cast-php` document, which has no real editor behind it. */
+  private mapLocation(document: CastDocument, target: PhpTarget, location: Location | LocationLink): Location | LocationLink | null {
     const uri = 'targetUri' in location ? location.targetUri : location.uri;
     if (uri !== target.virtual.uri) return location;
     if ('targetUri' in location) {
@@ -115,9 +132,9 @@ export class PhpDelegation {
       const targetSelectionRange = this.toSourceRange(document, target, location.targetSelectionRange);
       return targetRange && targetSelectionRange
         ? { ...location, targetUri: document.uri, targetRange, targetSelectionRange }
-        : location;
+        : null;
     }
     const range = this.toSourceRange(document, target, location.range);
-    return range ? Location.create(document.uri, range) : location;
+    return range ? Location.create(document.uri, range) : null;
   }
 }

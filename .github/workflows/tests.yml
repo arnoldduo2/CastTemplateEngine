@@ -33,6 +33,7 @@ jobs:
           cache-dependency-path: editor/language-core/package-lock.json
       - run: npm ci
       - run: npm test
+      - run: git diff --exit-code -- dist
 
   server:
     runs-on: ubuntu-latest

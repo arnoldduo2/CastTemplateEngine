@@ -3,9 +3,30 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const Module = require("node:module");
 const { formatText, indentFor, computeIndents } = require("../lib/indent");
 
 const fmt = (s, o) => formatText(s, o);
+
+test("lib/indent degrades to safe no-ops (never throws) when cast-language-core fails to load", () => {
+  const original = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "cast-language-core") throw new Error("simulated: npm install never ran");
+    return original.call(this, request, ...rest);
+  };
+  delete require.cache[require.resolve("../lib/indent")];
+  let degraded;
+  try {
+    degraded = require("../lib/indent");
+  } finally {
+    Module._load = original;
+    delete require.cache[require.resolve("../lib/indent")];
+  }
+
+  assert.equal(degraded.formatText("<div>\n<p>x</p>\n</div>"), "<div>\n<p>x</p>\n</div>", "formatText is a no-op, not a crash");
+  assert.equal(degraded.indentFor(["<div>", "<p>"], 1), null, "indentFor says 'leave it alone'");
+  assert.deepEqual(degraded.computeIndents(["a", "b"]), { depths: [null, null], after: [0, 0] });
+});
 
 test("HTML and component tags indent their children; void and self-closing tags do not", () => {
   const out = fmt(`<div class="a">\n<p>hi</p>\n<img src="x">\n<br>\n<Card title="t">\n<Btns.Button label="s" />\n<Slot name="f">x</Slot>\n</Card>\n</div>`);

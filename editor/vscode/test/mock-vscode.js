@@ -132,6 +132,7 @@ function create({ root, settings = {} }) {
   const handlers = {};
   const applied = [];
   const messages = [];
+  const diagnosticsChangeListeners = [];
   const globalStateStore = new Map();
   const globalState = {
     get: (key) => globalStateStore.get(key),
@@ -155,6 +156,9 @@ function create({ root, settings = {} }) {
     messages,
     globalState,
     window: { showInformationMessage: (message) => { messages.push(message); } },
+    /** Test-only: simulates VS Code's own CSS/JS language features finishing their async diagnostic computation
+     * for the given uris and firing languages.onDidChangeDiagnostics, which EmbeddedDiagnostics listens for. */
+    fireDiagnosticsChanged: (uris) => diagnosticsChangeListeners.forEach((fn) => fn({ uris })),
     commands: { registerCommand: (id, fn) => ((handlers[id] = fn), { dispose() {} }), executeCommand: async () => undefined },
     CompletionItem,
     CompletionItemKind: { Class: 6, Property: 9, EnumMember: 19, Field: 4 },
@@ -199,6 +203,10 @@ function create({ root, settings = {} }) {
       // (same "feature absent" shape extension.js already degrades to for every embedded-bridging capability).
       getDiagnostics: () => [],
       setTextDocumentLanguage: async (doc, languageId) => ((doc.languageId = languageId), doc),
+      onDidChangeDiagnostics: (fn) => {
+        diagnosticsChangeListeners.push(fn);
+        return { dispose() {} };
+      },
     },
     workspace: {
       onDidChangeTextDocument: (fn) => ((handlers.change = fn), { dispose() {} }),

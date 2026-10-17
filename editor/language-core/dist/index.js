@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.indentString = exports.indentFor = exports.formatCast = exports.computeIndents = exports.buildEmbeddedVirtuals = exports.buildPhpVirtual = exports.SourceMap = exports.firstMarkupOffset = exports.analyzeCast = void 0;
+exports.indentString = exports.indentPrefix = exports.indentFor = exports.formatCast = exports.computeIndents = exports.buildEmbeddedVirtuals = exports.buildPhpVirtual = exports.SourceMap = exports.firstMarkupOffset = exports.analyzeCast = void 0;
 __exportStar(require("./types.js"), exports);
 var regions_js_1 = require("./regions.js");
 Object.defineProperty(exports, "analyzeCast", { enumerable: true, get: function () { return regions_js_1.analyzeCast; } });
@@ -29,5 +29,6 @@ var indent_js_1 = require("./indent.js");
 Object.defineProperty(exports, "computeIndents", { enumerable: true, get: function () { return indent_js_1.computeIndents; } });
 Object.defineProperty(exports, "formatCast", { enumerable: true, get: function () { return indent_js_1.formatCast; } });
 Object.defineProperty(exports, "indentFor", { enumerable: true, get: function () { return indent_js_1.indentFor; } });
+Object.defineProperty(exports, "indentPrefix", { enumerable: true, get: function () { return indent_js_1.indentPrefix; } });
 Object.defineProperty(exports, "indentString", { enumerable: true, get: function () { return indent_js_1.indentString; } });
 //# sourceMappingURL=index.js.map

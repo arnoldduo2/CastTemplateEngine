@@ -236,6 +236,24 @@ test("Format Document re-indents the whole view and only touches leading whitesp
   assert.deepEqual(providers.formatting.provideDocumentFormattingEdits(document("/p/" + VIEW, out), { tabSize: 2, insertSpaces: true }), [], "nothing to do when it is right");
 });
 
+test("Format Document agrees with the LSP's formatCast on doc-comment alignment (single shared scanner, not two)", () => {
+  const { providers } = project({});
+  const src = "<div>\n<?php\nif ($a) {\n/**\n*Text\n*@param int $x\n*/\n$y = 1;\n}\n?>\n</div>";
+  const doc = document("/p/" + VIEW, src);
+  const out = apply(src, providers.formatting.provideDocumentFormattingEdits(doc, { tabSize: 4, insertSpaces: true }));
+  assert.equal(out, "<div>\n    <?php\n    if ($a) {\n        /**\n         *Text\n         *@param int $x\n         */\n        $y = 1;\n    }\n    ?>\n</div>", "the */ lines align one space in, matching editor/language-core's indentPrefix exactly");
+});
+
+test("activate() registers the extension's own Formatter as a fallback when no LSP client could start", () => {
+  // vscode-languageclient/node cannot actually construct against this lightweight mock (it extends a base class
+  // the mock doesn't shape), so every test run takes the "no client" branch - the one real-world case this can
+  // exercise. The "client started, skip the extension's own Formatter" branch is covered by inspection only (see
+  // activate(): it registers Formatter inside `if (!client) {...}`, set synchronously inside startLanguageClient
+  // before this check runs).
+  const { providers } = project({});
+  assert.ok(providers.formatting, "the extension's Formatter is the fallback when no LSP client started");
+});
+
 test("Format Selection only changes the selected lines", () => {
   const { providers } = project({});
   const src = "<div>\n<p>a</p>\n<p>b</p>\n<p>c</p>\n</div>";
@@ -312,6 +330,38 @@ test("EmbeddedDiagnostics.refresh maps CSS/JS provider diagnostics onto the real
   assert.equal(published.length, 2, "both the css and js block's provider diagnostics are published");
   assert.ok(published.some((d) => d.source === "cast-css" && d.message === "bad value"));
   assert.ok(published.some((d) => d.source === "cast-javascript" && d.message === "missing ;"));
+});
+
+test("EmbeddedDiagnostics.onVirtualDiagnosticsChanged re-runs refresh() once the CSS/JS provider's async computation actually finishes, not just at refresh() time", async () => {
+  // vscode.languages.getDiagnostics reads whatever VS Code's built-in CSS/JS language features have already
+  // computed - it does not trigger or wait for that computation, which runs on its own debounce after the virtual
+  // document opens/changes. Reading it synchronously inside refresh() (the original Task 7 implementation) sees
+  // nothing on the first call; the fix tracks which virtual uri belongs to which source document and re-runs
+  // refresh() when languages.onDidChangeDiagnostics fires for a tracked uri (wired in activate(); this test calls
+  // the handler directly, the same way that subscription does).
+  const { extension, vscode } = project({});
+  const { Range: MockRange, Position: MockPosition } = require("./mock-vscode");
+  const src = "before\n@css(\n  .a { color: red }\n)\nafter";
+  const doc = document("/p/" + VIEW, src);
+
+  let ready = false;
+  vscode.languages.getDiagnostics = async () =>
+    ready ? [{ range: new MockRange(new MockPosition(2, 7), new MockPosition(2, 10)), message: "bad value", severity: 0 }] : [];
+
+  const collection = vscode.languages.createDiagnosticCollection("cast-embedded");
+  const embedded = new extension.EmbeddedDiagnostics(collection);
+  await embedded.refresh(doc);
+  assert.deepEqual(vscode.collections["cast-embedded"].get(doc.uri.fsPath), [], "nothing published yet - the provider hasn't computed anything");
+
+  ready = true;
+  const [vUriString] = [...embedded.virtualToSource.keys()];
+  assert.ok(vUriString, "refresh() tracked the block's virtual uri against its source document");
+  embedded.onVirtualDiagnosticsChanged({ toString: () => vUriString });
+  await new Promise((r) => setImmediate(r));
+
+  const published = vscode.collections["cast-embedded"].get(doc.uri.fsPath);
+  assert.equal(published.length, 1, "republished once the provider's diagnostics became available, without a new explicit refresh() call from the caller");
+  assert.equal(published[0].message, "bad value");
 });
 
 test("EmbeddedDiagnostics.refresh publishes nothing (and never throws) when the embedded bridge is unavailable", async () => {

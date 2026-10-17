@@ -15,6 +15,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.computeIndents = computeIndents;
 exports.indentString = indentString;
+exports.indentPrefix = indentPrefix;
 exports.formatCast = formatCast;
 exports.indentFor = indentFor;
 const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr", "!doctype"]);

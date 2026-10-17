@@ -637,7 +637,7 @@ export function indentString(depth: number, { tabSize = 4, insertSpaces = true }
  * the scanner, and safe: real PHP/JS code never starts a line with a bare `*` (it is never valid at
  * statement-start position).
  */
-function indentPrefix(depth: number, stripped: string, options: FormatOptions): string {
+export function indentPrefix(depth: number, stripped: string, options: FormatOptions): string {
   return indentString(depth, options) + (stripped.startsWith("*") ? " " : "");
 }
 

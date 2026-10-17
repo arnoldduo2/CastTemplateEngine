@@ -7,6 +7,11 @@ const PHP_ARGUMENT_DIRECTIVES = new Set([
   'if', 'unless', 'isset', 'for', 'foreach', 'forelse', 'while', 'switch', 'case', 'elseif', 'php',
   'break', 'continue', 'map', 'filter',
 ]);
+/** @map/@filter's callback often ends in `=> return(<markup/>)` or `=> @render(<markup/>)` - markup, not PHP.
+ * Treating it as a PHP region would feed invalid syntax to a PHP language service and can break diagnostics/hover
+ * for the whole span, including the genuinely-PHP part before it (matches editor/vscode/lib/embedded.js's own
+ * MARKUP_RENDER exclusion, which this mirrors for the LSP's region model). */
+const MARKUP_RENDER = /\breturn\s*\(|@render\s*\(/;
 
 interface BalancedResult {
   contentStart: number;
@@ -154,7 +159,12 @@ function scan(text: string, analysis: CastAnalysis, start: number, end: number):
       addRegion(analysis, name === 'css' ? 'css' : 'javascript', parsed.contentStart, parsed.contentEnd, node);
       scanEmbeddedHoles(analysis, parsed.contentStart, parsed.contentEnd, node);
     } else if (parsed && PHP_ARGUMENT_DIRECTIVES.has(name)) {
-      addPhpRegion(analysis, parsed.contentStart, parsed.contentEnd, node);
+      let contentEnd = parsed.contentEnd;
+      if (name === 'map' || name === 'filter') {
+        const markup = MARKUP_RENDER.exec(text.slice(parsed.contentStart, contentEnd));
+        if (markup) contentEnd = parsed.contentStart + markup.index;
+      }
+      addPhpRegion(analysis, parsed.contentStart, contentEnd, node);
     }
     cursor = Math.max(directiveEnd, cursor + 1);
   }

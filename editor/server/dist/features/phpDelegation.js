@@ -50,7 +50,10 @@ class PhpDelegation {
         if (!result)
             return null;
         const mapOne = (location) => this.mapLocation(document, target, location);
-        return Array.isArray(result) ? result.map(mapOne) : mapOne(result);
+        if (!Array.isArray(result))
+            return mapOne(result);
+        const mapped = result.map(mapOne).filter((location) => location !== null);
+        return mapped.length ? mapped : null;
     }
     async signatureHelp(document, position) {
         const target = await this.targetAt(document, position);
@@ -78,13 +81,27 @@ class PhpDelegation {
         const mapped = target.virtual.map.toSourceRange({ start: virtualStart, end: virtualEnd, text: target.virtual.text.slice(virtualStart, virtualEnd) });
         return mapped ? vscode_languageserver_1.Range.create(positionAt(document.text, mapped.start), positionAt(document.text, mapped.end)) : null;
     }
-    mapCompletion(document, target, item) {
-        const mapEdit = (edit) => ({ ...edit, range: this.toSourceRange(document, target, edit.range) ?? edit.range });
-        const textEdit = item.textEdit
-            ? 'range' in item.textEdit ? mapEdit(item.textEdit) : item.textEdit
-            : undefined;
-        return { ...item, textEdit, additionalTextEdits: item.additionalTextEdits?.map(mapEdit) };
+    /**
+     * Maps an edit's range, or drops the edit (returns null) when the range falls in generated-only virtual text
+     * (buildPhpVirtual's own preamble/control-flow wrappers never map to a source range - see SourceMap.toSourceRange).
+     * A dropped textEdit still leaves the completion item usable via its own insertText/label; a dropped
+     * additionalTextEdit is simply omitted. Applying either at its untranslated virtual-document coordinates would
+     * silently corrupt the real Cast file at an arbitrary offset.
+     */
+    mapEdit(document, target, edit) {
+        const range = this.toSourceRange(document, target, edit.range);
+        return range ? { ...edit, range } : null;
     }
+    mapCompletion(document, target, item) {
+        const mapped = item.textEdit && 'range' in item.textEdit ? this.mapEdit(document, target, item.textEdit) : item.textEdit;
+        const textEdit = mapped ?? undefined;
+        const additionalTextEdits = item.additionalTextEdits
+            ?.map((edit) => this.mapEdit(document, target, edit))
+            .filter((edit) => edit !== null);
+        return { ...item, textEdit, additionalTextEdits };
+    }
+    /** Maps a definition result's range, or drops it (returns null) when mapping fails - never returns a Location
+     * still pointing at the virtual `.cast-php` document, which has no real editor behind it. */
     mapLocation(document, target, location) {
         const uri = 'targetUri' in location ? location.targetUri : location.uri;
         if (uri !== target.virtual.uri)
@@ -94,10 +111,10 @@ class PhpDelegation {
             const targetSelectionRange = this.toSourceRange(document, target, location.targetSelectionRange);
             return targetRange && targetSelectionRange
                 ? { ...location, targetUri: document.uri, targetRange, targetSelectionRange }
-                : location;
+                : null;
         }
         const range = this.toSourceRange(document, target, location.range);
-        return range ? vscode_languageserver_1.Location.create(document.uri, range) : location;
+        return range ? vscode_languageserver_1.Location.create(document.uri, range) : null;
     }
 }
 exports.PhpDelegation = PhpDelegation;
