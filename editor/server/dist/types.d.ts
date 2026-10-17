@@ -1,4 +1,5 @@
 import { Range, DiagnosticSeverity } from 'vscode-languageserver';
+import { SlotSpec } from 'cast-language-core';
 export interface PropDefinition {
     name: string;
     type: string;
@@ -7,6 +8,10 @@ export interface PropDefinition {
     defaultValue?: string;
     description?: string;
     range?: Range;
+    values?: string[];
+    kind?: 'bool' | 'number' | 'string' | 'other';
+    deprecated?: boolean | string;
+    inferred?: boolean;
 }
 export interface ComponentMetadata {
     tag: string;
@@ -16,7 +21,9 @@ export interface ComponentMetadata {
     description?: string;
     extends?: string;
     props: Map<string, PropDefinition>;
-    slots: string[];
+    slots: SlotSpec[];
+    deprecated?: boolean | string;
+    examples?: string[];
     mtime: number;
 }
 export interface CastDirectiveSpec {

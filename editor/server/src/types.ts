@@ -1,4 +1,5 @@
 import { Range, Position, DiagnosticSeverity } from 'vscode-languageserver';
+import { SlotSpec } from 'cast-language-core';
 
 export interface PropDefinition {
   name: string;
@@ -8,6 +9,12 @@ export interface PropDefinition {
   defaultValue?: string;
   description?: string;
   range?: Range;
+  // From cast-language-core's PropSpec (parseComponent) - undefined when a prop came only from @props{}/legacy
+  // ??= defaults rather than a docblock tag, since parseComponent's own merge rule still wins for those fields.
+  values?: string[];
+  kind?: 'bool' | 'number' | 'string' | 'other';
+  deprecated?: boolean | string;
+  inferred?: boolean;
 }
 
 export interface ComponentMetadata {
@@ -18,7 +25,9 @@ export interface ComponentMetadata {
   description?: string;     // parsed from docblock
   extends?: string;         // target of @props extends::...
   props: Map<string, PropDefinition>;
-  slots: string[];
+  slots: SlotSpec[];
+  deprecated?: boolean | string;
+  examples?: string[];
   mtime: number;
 }
 

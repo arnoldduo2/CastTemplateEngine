@@ -30,7 +30,7 @@ export class DiagnosticsManager {
         if (propDef.isRequired) {
           // Can be satisfied by attribute OR by <Slot name="propName">
           const isSatisfiedByAttr = providedAttrs.has(propName);
-          const isSatisfiedBySlot = meta.slots.includes(propName);
+          const isSatisfiedBySlot = meta.slots.some((slot) => slot.name === propName);
 
           if (!isSatisfiedByAttr && !isSatisfiedBySlot) {
             diagnostics.push({

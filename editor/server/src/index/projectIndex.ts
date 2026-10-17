@@ -1,13 +1,25 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { parseComponent, resolveLegacyComponent, resolveView, resolveModule, splitUnion } from 'cast-language-core';
 import { ComponentMetadata, PropDefinition } from '../types.js';
+import { CastSettings, DEFAULT_SETTINGS } from '../settings.js';
 import { CastParser } from '../parser/castParser.js';
+
+/** parseComponent (cast-language-core) is pure text analysis with no position tracking, matching the PHP reader's
+ * own JSON-only output - but a @props{} entry's declared range (for go-to-definition on a prop) only exists in
+ * CastParser's real AST. CastParser stays in use for that one piece; every other field comes from parseComponent. */
+function isNullableType(type: string | null): boolean {
+  if (!type) return false;
+  if (type.startsWith('?')) return true;
+  return splitUnion(type).some((t) => /^null$/i.test(t));
+}
 
 export class ProjectIndex {
   private components: Map<string, ComponentMetadata> = new Map(); // Tag => Metadata
   private fileToTag: Map<string, string> = new Map();             // fsPath => Tag
-  private parser: CastParser = new CastParser();
   private workspaceRoots: string[] = [];
+  private settings: CastSettings = DEFAULT_SETTINGS;
+  private parser: CastParser = new CastParser(); // @props{} entry ranges only - see isNullableType's comment above
 
   constructor(workspaceRoots: string[] = []) {
     this.workspaceRoots = workspaceRoots;
@@ -15,6 +27,35 @@ export class ProjectIndex {
 
   public setWorkspaceRoots(roots: string[]): void {
     this.workspaceRoots = roots;
+  }
+
+  /** Stores the resolved cast.* settings and re-indexes, so a changed componentsPath/extension takes effect. */
+  public setSettings(settings: CastSettings): void {
+    this.settings = settings;
+    void this.indexAll();
+  }
+
+  private componentDirs(): string[] {
+    return this.workspaceRoots.flatMap((root) => this.settings.componentsPath.map((p) => path.join(root, p)));
+  }
+
+  /** `Component('btns.add-new')` - resolved against the same componentsPath settings as component tags. */
+  public resolveLegacyComponent(name: string): { file: string | null; tried: string[] } {
+    return resolveLegacyComponent(name, this.componentDirs(), this.settings.extension);
+  }
+
+  /** `__includes('layouts.header')`, `view('home.home')` - resolved under the first workspace root's viewsPath. */
+  public resolveView(name: string): { file: string | null; tried: string[] } {
+    const root = this.workspaceRoots[0];
+    if (!root) return { file: null, tried: [] };
+    return resolveView(name, path.join(root, this.settings.viewsPath), this.settings.extension);
+  }
+
+  /** `__modules('items.items', 'js')` - resolved under the first workspace root's resourcesPath. */
+  public resolveModule(name: string, type: 'css' | 'js'): { file: string | null; tried: string[] } {
+    const root = this.workspaceRoots[0];
+    if (!root) return { file: null, tried: [] };
+    return resolveModule(name, type, path.join(root, this.settings.resourcesPath));
   }
 
   public async indexAll(): Promise<void> {
@@ -77,64 +118,33 @@ export class ProjectIndex {
       // Tag name generation from relative path:
       // e.g. "btns/btn-soft.cast.php" -> "Btns.Soft" or "Btns.BtnSoft"
       const tag = this.pathToTag(relative);
+
+      // The shared parser already merges docblocks, legacy ??= defaults, and @props{} with the engine's own
+      // priority rule (verified byte-for-byte against the PHP reader's fixtures) - no second, independently-drifted
+      // merge pass needed here. CastParser is still used, but only for a @props{} entry's own source range (for
+      // go-to-definition), which parseComponent's pure text analysis has no equivalent of.
+      const spec = parseComponent(content);
       const doc = this.parser.parse(fsPath, content);
+      const rangeByName = new Map<string, PropDefinition['range']>();
+      if (doc.propsBlock) {
+        for (const entry of doc.propsBlock.entries) rangeByName.set(entry.name, entry.range);
+      }
 
       const props = new Map<string, PropDefinition>();
-      let description: string | undefined;
-
-      // Extract props from @props block
-      if (doc.propsBlock) {
-        for (const entry of doc.propsBlock.entries) {
-          props.set(entry.name, {
-            name: entry.name,
-            type: entry.type,
-            isNullable: entry.isNullable,
-            isRequired: entry.isRequired,
-            defaultValue: entry.defaultValue,
-            range: entry.range
-          });
-        }
-      }
-
-      // Also extract docblock props / descriptions if present
-      const docblockMatch = /\/\*\*([\s\S]*?)\*\//.exec(content);
-      if (docblockMatch) {
-        const docText = docblockMatch[1];
-        const descMatch = /^\s*\*\s*([^@\n\r][^\n\r]*)/m.exec(docText);
-        if (descMatch) {
-          description = descMatch[1].trim();
-        }
-
-        const paramRegex = /@param\s+(\S+)\s+\$([a-zA-Z0-9_]+)(?:\s+(.*))?/g;
-        let pMatch: RegExpExecArray | null;
-        while ((pMatch = paramRegex.exec(docText)) !== null) {
-          const type = pMatch[1];
-          const name = pMatch[2];
-          const desc = pMatch[3]?.trim();
-
-          if (!props.has(name)) {
-            props.set(name, {
-              name,
-              type,
-              isNullable: type.includes('null') || type.startsWith('?'),
-              isRequired: false,
-              description: desc
-            });
-          } else {
-            const existing = props.get(name)!;
-            if (desc) existing.description = desc;
-          }
-        }
-      }
-
-      const slots: string[] = [];
-      for (const comp of doc.components) {
-        if (comp.name === 'Slot') {
-          const nameAttr = comp.attributes.find(a => a.name === 'name');
-          if (nameAttr?.value) {
-            slots.push(nameAttr.value);
-          }
-        }
+      for (const prop of spec.props) {
+        props.set(prop.name, {
+          name: prop.name,
+          type: prop.type ?? '',
+          isNullable: isNullableType(prop.type),
+          isRequired: prop.required,
+          defaultValue: prop.default ?? undefined,
+          description: prop.description || undefined,
+          range: rangeByName.get(prop.name),
+          values: prop.values,
+          kind: prop.kind,
+          deprecated: prop.deprecated,
+          inferred: prop.inferred
+        });
       }
 
       // Project view overrides framework view if duplicate tag
@@ -148,10 +158,12 @@ export class ProjectIndex {
         fsPath,
         relativePath: relative,
         isFramework,
-        description,
-        extends: doc.propsBlock?.extendsTarget,
+        description: spec.description || undefined,
+        extends: spec.extends,
         props,
-        slots,
+        slots: spec.slots,
+        deprecated: spec.deprecated,
+        examples: spec.examples,
         mtime: stats.mtimeMs
       };
 

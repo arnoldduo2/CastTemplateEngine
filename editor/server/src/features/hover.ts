@@ -81,7 +81,7 @@ export class HoverProvider {
     if (meta.slots.length > 0) {
       md += `#### Slots:\n`;
       for (const slot of meta.slots) {
-        md += `- \`<Slot name="${slot}">\`\n`;
+        md += `- \`<Slot name="${slot.name}">\`\n`;
       }
     }
 
