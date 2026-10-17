@@ -162,6 +162,7 @@
     "package": "npx @vscode/vsce package --no-dependencies"
   },
   "dependencies": {
+    "cast-language-core": "file:../language-core",
     "vscode-languageclient": "^8.1.0"
   },
   "devDependencies": {
