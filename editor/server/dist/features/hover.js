@@ -108,7 +108,7 @@ class HoverProvider {
         for (const [key, block] of Object.entries(this.syntax.blocks)) {
             if (block.open === `@${name}` || block.close === `@${name}` || block.intermediates.includes(`@${name}`)) {
                 let md = `**Cast Directive: \`@${name}\`**\n\n${block.description}\n\n`;
-                md += `\`\`\`cast\n${block.open} ... ${block.close}\n\`\`\``;
+                md += `\`\`\`php\n${block.open} ... ${block.close}\n\`\`\``;
                 return {
                     contents: {
                         kind: vscode_languageserver_1.MarkupKind.Markdown,

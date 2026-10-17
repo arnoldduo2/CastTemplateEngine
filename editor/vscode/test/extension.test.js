@@ -271,3 +271,45 @@ test("typing: a line that becomes </div>, <?php endif ?> or @endif moves back by
   off.handlers.change({ document: doc, contentChanges: [{ text: ">", rangeLength: 0, range: new R(new Position(3, 12), new Position(3, 12)) }] });
   assert.equal(off.applied.length, 0, "the setting turns it off");
 });
+
+test("EmbeddedDiagnostics.refresh maps CSS/JS provider diagnostics onto the real document, tagged cast-css/cast-javascript", async () => {
+  const { extension, vscode } = project({});
+  const { Range: MockRange, Position: MockPosition } = require("./mock-vscode");
+  const src = "before\n@css(\n  .a { color: red }\n)\nafter\n@js(\n  let x = 1\n)\nend";
+  const doc = document("/p/" + VIEW, src);
+
+  vscode.languages.getDiagnostics = async (uri) => {
+    if (/\.css$/.test(uri.fsPath)) return [{ range: new MockRange(new MockPosition(2, 7), new MockPosition(2, 10)), message: "bad value", severity: 0 }];
+    if (/\.js$/.test(uri.fsPath)) return [{ range: new MockRange(new MockPosition(6, 2), new MockPosition(6, 9)), message: "missing ;", severity: 1 }];
+    return [];
+  };
+
+  const collection = vscode.languages.createDiagnosticCollection("cast-embedded");
+  const embedded = new extension.EmbeddedDiagnostics(collection);
+  await embedded.refresh(doc);
+
+  const published = vscode.collections["cast-embedded"].get(doc.uri.fsPath);
+  assert.equal(published.length, 2, "both the css and js block's provider diagnostics are published");
+  assert.ok(published.some((d) => d.source === "cast-css" && d.message === "bad value"));
+  assert.ok(published.some((d) => d.source === "cast-javascript" && d.message === "missing ;"));
+});
+
+test("EmbeddedDiagnostics.refresh publishes nothing (and never throws) when the embedded bridge is unavailable", async () => {
+  const vscode = require("./mock-vscode").create({ root: undefined });
+  delete vscode.EventEmitter; // same guard activate() itself uses before wiring the embedded bridge
+  const original = require("node:module")._load;
+  require("node:module")._load = function (request, ...rest) {
+    return request === "vscode" ? vscode : original.call(this, request, ...rest);
+  };
+  delete require.cache[require.resolve("../extension")];
+  const extension = require("../extension");
+  require("node:module")._load = original;
+  extension.activate({ subscriptions: [] });
+
+  const collection = vscode.languages.createDiagnosticCollection("cast-embedded");
+  const embedded = new extension.EmbeddedDiagnostics(collection);
+  const src = "@css(\n  .a { color: red }\n)";
+  await embedded.refresh(document("/p/" + VIEW, src));
+
+  assert.deepEqual(vscode.collections["cast-embedded"].get("/p/" + VIEW), []);
+});

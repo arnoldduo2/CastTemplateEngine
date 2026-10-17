@@ -1,5 +1,6 @@
 import { test, describe } from 'node:test';
 import * as assert from 'node:assert';
+import { InsertTextFormat } from 'vscode-languageserver';
 import { CastParser } from '../parser/castParser.js';
 import { ProjectIndex } from '../index/projectIndex.js';
 import { CompletionProvider } from '../features/completion.js';
@@ -25,6 +26,25 @@ describe('Language Server Features', () => {
     assert.ok(labels.includes('@props'), 'Should include @props');
   });
 
+  test('directive completions carry an explicit replacement edit for the typed @ prefix, plus @js and @{}', () => {
+    const text = '<div>\n    @ph';
+    const doc = parser.parse('file:///view.cast.php', text);
+    const items = completionProvider.getCompletions(doc, { line: 1, character: 7 });
+
+    const php = items.find(i => i.label === '@php');
+    assert.ok(php?.textEdit && 'newText' in php.textEdit, '@php completion should carry an explicit replacement edit');
+    assert.equal((php!.textEdit as { newText: string }).newText, '@php\n\t$0\n@endphp');
+    assert.deepEqual((php!.textEdit as { range: unknown }).range, { start: { line: 1, character: 4 }, end: { line: 1, character: 7 } });
+
+    const js = items.find(i => i.label === '@js');
+    assert.ok(js, 'should offer an @js completion alongside @css and @script');
+    assert.equal(js!.insertTextFormat, InsertTextFormat.Snippet);
+
+    const hole = items.find(i => i.label === '@{}');
+    assert.ok(hole, 'should offer an @{} echo-hole completion');
+    assert.equal((hole!.textEdit as { newText: string }).newText, '@{ ${1:expression} }');
+  });
+
   test('hover on directives returns syntax documentation', () => {
     const text = `@if ($active)\n    <span>Active</span>\n@endif`;
     const doc = parser.parse('file:///view.cast.php', text);
@@ -33,6 +53,17 @@ describe('Language Server Features', () => {
     assert.ok(hover, 'Should return hover for @if');
     const md = typeof hover.contents === 'object' && 'value' in hover.contents ? hover.contents.value : '';
     assert.ok(md.includes('Cast Directive: `@if`'));
+  });
+
+  test('directive hover uses a markdown fence the editor understands, never an unregistered "cast" fence', () => {
+    const text = `@if ($active)\n    <span>Active</span>\n@endif`;
+    const doc = parser.parse('file:///view.cast.php', text);
+    const hover = hoverProvider.getHover(doc, { line: 0, character: 1 });
+
+    assert.ok(hover, 'Should return hover for @if');
+    const md = typeof hover.contents === 'object' && 'value' in hover.contents ? hover.contents.value : '';
+    assert.ok(!md.includes('```cast'), 'must not use the unregistered cast fence');
+    assert.ok(md.includes('```php'), 'should fall back to a registered fence (php) for directive syntax');
   });
 
   test('formatting cleans up directive indentation', () => {

@@ -25,6 +25,12 @@ class Uri {
   static file(p) {
     return new Uri(p);
   }
+  static parse(s) {
+    return new Uri(s);
+  }
+  toString() {
+    return this.fsPath;
+  }
 }
 class Location {
   constructor(uri, position) {
@@ -79,6 +85,20 @@ class Diagnostic {
     this.severity = severity;
   }
 }
+class EventEmitter {
+  constructor() {
+    this._listeners = [];
+  }
+  get event() {
+    return (listener) => {
+      this._listeners.push(listener);
+      return { dispose() {} };
+    };
+  }
+  fire(e) {
+    this._listeners.slice().forEach((l) => l(e));
+  }
+}
 class CodeAction {
   constructor(title, kind) {
     this.title = title;
@@ -124,15 +144,17 @@ function create({ root, settings = {} }) {
     collections,
     handlers,
     applied,
-    commands: { registerCommand: (id, fn) => ((handlers[id] = fn), { dispose() {} }) },
+    commands: { registerCommand: (id, fn) => ((handlers[id] = fn), { dispose() {} }), executeCommand: async () => undefined },
     CompletionItem,
     CompletionItemKind: { Class: 6, Property: 9, EnumMember: 19, Field: 4 },
     SnippetString,
     Diagnostic,
+    DiagnosticSeverity: { Error: 0, Warning: 1, Information: 2, Hint: 3 },
     CodeAction,
     CodeActionKind: { QuickFix: "quickfix" },
     WorkspaceEdit,
     TextEdit,
+    EventEmitter,
     languages: {
       registerDocumentLinkProvider: (selector, p) => ((providers.links = p), { dispose() {} }),
       // several providers of a kind may register: tests look at them by role
@@ -162,12 +184,18 @@ function create({ root, settings = {} }) {
         collections[name] = store;
         return { set: (uri, list) => store.set(uri.fsPath, list), delete: (uri) => store.delete(uri.fsPath), dispose() {} };
       },
+      // overridden per-test to return canned provider diagnostics for a virtual document's uri; [] by default
+      // (same "feature absent" shape extension.js already degrades to for every embedded-bridging capability).
+      getDiagnostics: () => [],
+      setTextDocumentLanguage: async (doc, languageId) => ((doc.languageId = languageId), doc),
     },
     workspace: {
       onDidChangeTextDocument: (fn) => ((handlers.change = fn), { dispose() {} }),
       applyEdit: async (edit) => (applied.push(edit), true),
       getWorkspaceFolder: () => (root ? { uri: Uri.file(root) } : undefined),
       getConfiguration: () => ({ get: (key, fallback) => (key in settings ? settings[key] : fallback) }),
+      registerTextDocumentContentProvider: () => ({ dispose() {} }),
+      openTextDocument: async (uri) => ({ uri, languageId: "plaintext" }),
     },
   };
   return api;

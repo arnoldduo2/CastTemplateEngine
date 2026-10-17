@@ -2,7 +2,9 @@ import {
   CompletionItem,
   CompletionItemKind,
   InsertTextFormat,
-  Position
+  Position,
+  Range,
+  TextEdit
 } from 'vscode-languageserver';
 import { CastDocument } from '../parser/ast.js';
 import { ProjectIndex } from '../index/projectIndex.js';
@@ -23,8 +25,10 @@ export class CompletionProvider {
     }
 
     // 2. Directives (prefix starts with @)
-    if (/@([a-zA-Z0-9_]*)$/.test(prefix)) {
-      return this.getDirectiveCompletions();
+    const directiveMatch = /@([a-zA-Z0-9_]*)$/.exec(prefix);
+    if (directiveMatch) {
+      const range = Range.create(position.line, prefix.length - directiveMatch[0].length, position.line, position.character);
+      return this.getDirectiveCompletions(range);
     }
 
     // 3. Inside a Component tag (attributes completion)
@@ -41,21 +45,22 @@ export class CompletionProvider {
     return [];
   }
 
-  private getDirectiveCompletions(): CompletionItem[] {
+  private getDirectiveCompletions(range: Range): CompletionItem[] {
     const items: CompletionItem[] = [];
+    const snippet = (newText: string): TextEdit => TextEdit.replace(range, newText);
 
     // Blocks
     for (const [key, block] of Object.entries(this.syntax.blocks)) {
-      let snippet = `${block.open}`;
-      if (block.hasArgs) snippet += ` (\${1:condition})\n\t$0\n${block.close}`;
-      else snippet += `\n\t$0\n${block.close}`;
+      let newText = `${block.open}`;
+      if (block.hasArgs) newText += ` (\${1:condition})\n\t$0\n${block.close}`;
+      else newText += `\n\t$0\n${block.close}`;
 
       items.push({
         label: block.open,
         kind: CompletionItemKind.Keyword,
         detail: `Cast block: ${key}`,
         documentation: block.description,
-        insertText: snippet,
+        textEdit: snippet(newText),
         insertTextFormat: InsertTextFormat.Snippet
       });
     }
@@ -67,7 +72,7 @@ export class CompletionProvider {
         kind: CompletionItemKind.Keyword,
         detail: '@props{ type $name; }',
         documentation: 'Declare strictly typed component props with optional defaults.',
-        insertText: '@props {\n\t${1:string} \\$${2:name};\n}',
+        textEdit: snippet('@props {\n\t${1:string} \\$${2:name};\n}'),
         insertTextFormat: InsertTextFormat.Snippet
       },
       {
@@ -75,7 +80,7 @@ export class CompletionProvider {
         kind: CompletionItemKind.Function,
         detail: '@css(...)',
         documentation: 'Component-scoped CSS with automatic class isolation.',
-        insertText: '@css(\n\t.$1 {\n\t\t$0\n\t}\n)',
+        textEdit: snippet('@css(\n\t.$1 {\n\t\t$0\n\t}\n)'),
         insertTextFormat: InsertTextFormat.Snippet
       },
       {
@@ -83,7 +88,23 @@ export class CompletionProvider {
         kind: CompletionItemKind.Function,
         detail: '@script(...)',
         documentation: 'Component-scoped JavaScript registration.',
-        insertText: '@script(\n\t$0\n)',
+        textEdit: snippet('@script(\n\t$0\n)'),
+        insertTextFormat: InsertTextFormat.Snippet
+      },
+      {
+        label: '@js',
+        kind: CompletionItemKind.Function,
+        detail: '@js(...)',
+        documentation: 'Component-scoped JavaScript, rendered inline without a <script> wrapper.',
+        textEdit: snippet('@js(\n\t$0\n)'),
+        insertTextFormat: InsertTextFormat.Snippet
+      },
+      {
+        label: '@{}',
+        kind: CompletionItemKind.Function,
+        detail: '@{ expression }',
+        documentation: 'Echo interpolation for a PHP expression, equivalent to <?= ... ?>.',
+        textEdit: snippet('@{ ${1:expression} }'),
         insertTextFormat: InsertTextFormat.Snippet
       },
       {
@@ -91,21 +112,21 @@ export class CompletionProvider {
         kind: CompletionItemKind.Function,
         detail: '@csrf',
         documentation: 'Renders CSRF hidden token field.',
-        insertText: '@csrf'
+        textEdit: snippet('@csrf')
       },
       {
         label: '@styles',
         kind: CompletionItemKind.Function,
         detail: '@styles',
         documentation: 'Renders component stylesheet bundle in layout head.',
-        insertText: '@styles'
+        textEdit: snippet('@styles')
       },
       {
         label: '@scripts',
         kind: CompletionItemKind.Function,
         detail: '@scripts',
         documentation: 'Renders component script bundle before body close.',
-        insertText: '@scripts'
+        textEdit: snippet('@scripts')
       }
     );
 

@@ -17,8 +17,10 @@ class CompletionProvider {
             return this.getExtendsCompletions();
         }
         // 2. Directives (prefix starts with @)
-        if (/@([a-zA-Z0-9_]*)$/.test(prefix)) {
-            return this.getDirectiveCompletions();
+        const directiveMatch = /@([a-zA-Z0-9_]*)$/.exec(prefix);
+        if (directiveMatch) {
+            const range = vscode_languageserver_1.Range.create(position.line, prefix.length - directiveMatch[0].length, position.line, position.character);
+            return this.getDirectiveCompletions(range);
         }
         // 3. Inside a Component tag (attributes completion)
         const tagContext = this.findComponentTagContext(doc, position);
@@ -31,21 +33,22 @@ class CompletionProvider {
         }
         return [];
     }
-    getDirectiveCompletions() {
+    getDirectiveCompletions(range) {
         const items = [];
+        const snippet = (newText) => vscode_languageserver_1.TextEdit.replace(range, newText);
         // Blocks
         for (const [key, block] of Object.entries(this.syntax.blocks)) {
-            let snippet = `${block.open}`;
+            let newText = `${block.open}`;
             if (block.hasArgs)
-                snippet += ` (\${1:condition})\n\t$0\n${block.close}`;
+                newText += ` (\${1:condition})\n\t$0\n${block.close}`;
             else
-                snippet += `\n\t$0\n${block.close}`;
+                newText += `\n\t$0\n${block.close}`;
             items.push({
                 label: block.open,
                 kind: vscode_languageserver_1.CompletionItemKind.Keyword,
                 detail: `Cast block: ${key}`,
                 documentation: block.description,
-                insertText: snippet,
+                textEdit: snippet(newText),
                 insertTextFormat: vscode_languageserver_1.InsertTextFormat.Snippet
             });
         }
@@ -55,40 +58,54 @@ class CompletionProvider {
             kind: vscode_languageserver_1.CompletionItemKind.Keyword,
             detail: '@props{ type $name; }',
             documentation: 'Declare strictly typed component props with optional defaults.',
-            insertText: '@props {\n\t${1:string} \\$${2:name};\n}',
+            textEdit: snippet('@props {\n\t${1:string} \\$${2:name};\n}'),
             insertTextFormat: vscode_languageserver_1.InsertTextFormat.Snippet
         }, {
             label: '@css',
             kind: vscode_languageserver_1.CompletionItemKind.Function,
             detail: '@css(...)',
             documentation: 'Component-scoped CSS with automatic class isolation.',
-            insertText: '@css(\n\t.$1 {\n\t\t$0\n\t}\n)',
+            textEdit: snippet('@css(\n\t.$1 {\n\t\t$0\n\t}\n)'),
             insertTextFormat: vscode_languageserver_1.InsertTextFormat.Snippet
         }, {
             label: '@script',
             kind: vscode_languageserver_1.CompletionItemKind.Function,
             detail: '@script(...)',
             documentation: 'Component-scoped JavaScript registration.',
-            insertText: '@script(\n\t$0\n)',
+            textEdit: snippet('@script(\n\t$0\n)'),
+            insertTextFormat: vscode_languageserver_1.InsertTextFormat.Snippet
+        }, {
+            label: '@js',
+            kind: vscode_languageserver_1.CompletionItemKind.Function,
+            detail: '@js(...)',
+            documentation: 'Component-scoped JavaScript, rendered inline without a <script> wrapper.',
+            textEdit: snippet('@js(\n\t$0\n)'),
+            insertTextFormat: vscode_languageserver_1.InsertTextFormat.Snippet
+        }, {
+            label: '@{}',
+            kind: vscode_languageserver_1.CompletionItemKind.Function,
+            detail: '@{ expression }',
+            documentation: 'Echo interpolation for a PHP expression, equivalent to <?= ... ?>.',
+            textEdit: snippet('@{ ${1:expression} }'),
             insertTextFormat: vscode_languageserver_1.InsertTextFormat.Snippet
         }, {
             label: '@csrf',
             kind: vscode_languageserver_1.CompletionItemKind.Function,
             detail: '@csrf',
             documentation: 'Renders CSRF hidden token field.',
-            insertText: '@csrf'
+            textEdit: snippet('@csrf')
         }, {
             label: '@styles',
             kind: vscode_languageserver_1.CompletionItemKind.Function,
             detail: '@styles',
             documentation: 'Renders component stylesheet bundle in layout head.',
-            insertText: '@styles'
+            textEdit: snippet('@styles')
         }, {
             label: '@scripts',
             kind: vscode_languageserver_1.CompletionItemKind.Function,
             detail: '@scripts',
             documentation: 'Renders component script bundle before body close.',
-            insertText: '@scripts'
+            textEdit: snippet('@scripts')
         });
         return items;
     }

@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const node_test_1 = require("node:test");
 const assert = __importStar(require("node:assert"));
+const vscode_languageserver_1 = require("vscode-languageserver");
 const castParser_js_1 = require("../parser/castParser.js");
 const projectIndex_js_1 = require("../index/projectIndex.js");
 const completion_js_1 = require("../features/completion.js");
@@ -56,6 +57,21 @@ const formatting_js_1 = require("../features/formatting.js");
         assert.ok(labels.includes('@foreach'), 'Should include @foreach');
         assert.ok(labels.includes('@props'), 'Should include @props');
     });
+    (0, node_test_1.test)('directive completions carry an explicit replacement edit for the typed @ prefix, plus @js and @{}', () => {
+        const text = '<div>\n    @ph';
+        const doc = parser.parse('file:///view.cast.php', text);
+        const items = completionProvider.getCompletions(doc, { line: 1, character: 7 });
+        const php = items.find(i => i.label === '@php');
+        assert.ok(php?.textEdit && 'newText' in php.textEdit, '@php completion should carry an explicit replacement edit');
+        assert.equal(php.textEdit.newText, '@php\n\t$0\n@endphp');
+        assert.deepEqual(php.textEdit.range, { start: { line: 1, character: 4 }, end: { line: 1, character: 7 } });
+        const js = items.find(i => i.label === '@js');
+        assert.ok(js, 'should offer an @js completion alongside @css and @script');
+        assert.equal(js.insertTextFormat, vscode_languageserver_1.InsertTextFormat.Snippet);
+        const hole = items.find(i => i.label === '@{}');
+        assert.ok(hole, 'should offer an @{} echo-hole completion');
+        assert.equal(hole.textEdit.newText, '@{ ${1:expression} }');
+    });
     (0, node_test_1.test)('hover on directives returns syntax documentation', () => {
         const text = `@if ($active)\n    <span>Active</span>\n@endif`;
         const doc = parser.parse('file:///view.cast.php', text);
@@ -63,6 +79,15 @@ const formatting_js_1 = require("../features/formatting.js");
         assert.ok(hover, 'Should return hover for @if');
         const md = typeof hover.contents === 'object' && 'value' in hover.contents ? hover.contents.value : '';
         assert.ok(md.includes('Cast Directive: `@if`'));
+    });
+    (0, node_test_1.test)('directive hover uses a markdown fence the editor understands, never an unregistered "cast" fence', () => {
+        const text = `@if ($active)\n    <span>Active</span>\n@endif`;
+        const doc = parser.parse('file:///view.cast.php', text);
+        const hover = hoverProvider.getHover(doc, { line: 0, character: 1 });
+        assert.ok(hover, 'Should return hover for @if');
+        const md = typeof hover.contents === 'object' && 'value' in hover.contents ? hover.contents.value : '';
+        assert.ok(!md.includes('```cast'), 'must not use the unregistered cast fence');
+        assert.ok(md.includes('```php'), 'should fall back to a registered fence (php) for directive syntax');
     });
     (0, node_test_1.test)('formatting cleans up directive indentation', () => {
         const unformatted = `@if ($active)\n<p>Active</p>\n@else\n<p>Inactive</p>\n@endif`;

@@ -200,6 +200,10 @@ function spanKey(uri, start) {
 // Replaced with a real opener inside activate() (same convention as the diagnostics collection below: nothing that
 // needs a live `vscode` instance - EventEmitter, content providers - is constructed at module load time).
 let openEmbedded = async () => undefined;
+/** True once createEmbeddedProvider() has installed a real openEmbedded - i.e. the host exposes EventEmitter and
+ * a content-provider registry. EmbeddedDiagnostics uses this the same way EmbeddedHovers/EmbeddedCompletions do:
+ * skip bridging entirely, rather than open a virtual document that can never receive provider diagnostics. */
+let embeddedBridgeReady = false;
 
 /** Registers the `cast-embedded:` scheme and returns its content provider for `activate()` to subscribe. */
 function createEmbeddedProvider() {
@@ -213,6 +217,7 @@ function createEmbeddedProvider() {
     }
     return vscode.workspace.openTextDocument(uri);
   };
+  embeddedBridgeReady = true;
   return {
     onDidChange: embeddedEmitter.event,
     provideTextDocumentContent(uri) {
@@ -223,6 +228,65 @@ function createEmbeddedProvider() {
 
 const BLOCK_LANGUAGE = { css: "css", script: "javascript", js: "javascript" };
 const BLOCK_EXT = { css: "css", script: "js", js: "js" };
+const BLOCK_DIAGNOSTIC_SOURCE = { css: "cast-css", script: "cast-javascript", js: "cast-javascript" };
+
+/**
+ * Publishes CSS/JS provider diagnostics for every `@css`/`@script`/`@js` block into one collection, tagged
+ * `cast-css`/`cast-javascript`. Independent of the LSP's own `cast-php`/`cast-engine` diagnostics (a separate
+ * collection, populated over the language-client protocol): a broken nested `@{ }` hole never suppresses CSS/JS
+ * checking of the surrounding block, and vice versa (spec: "A broken embedded-language span does not suppress
+ * independent Cast-envelope diagnostics").
+ *
+ * `buildBlockVirtual`'s body is copied at the same offsets/line lengths as the source (see its own doc comment),
+ * so a provider's range inside the virtual document is already the real document's range - no separate source
+ * map is needed to place it back, the same convention `openPhpVirtual`'s masking already relies on.
+ */
+class EmbeddedDiagnostics {
+  constructor(collection) {
+    this.collection = collection;
+  }
+
+  async refresh(document) {
+    if (!/\.cast\.php$/.test(document.uri.fsPath)) return;
+    if (!embeddedBridgeReady) {
+      this.collection.set(document.uri, []);
+      return;
+    }
+
+    const text = document.getText();
+    const results = [];
+    for (const block of findEmbeddedBlocks(text)) {
+      const languageId = BLOCK_LANGUAGE[block.kind];
+      const ext = BLOCK_EXT[block.kind];
+      const vdoc = await openEmbedded(spanKey(document.uri, block.start), ext, buildBlockVirtual(text, block));
+      if (!vdoc) continue;
+      if (vdoc.languageId !== languageId) await vscode.languages.setTextDocumentLanguage(vdoc, languageId);
+
+      const source = BLOCK_DIAGNOSTIC_SOURCE[block.kind];
+      for (const provided of await this.providerDiagnostics(vdoc.uri)) {
+        const diagnostic = new vscode.Diagnostic(provided.range, provided.message, provided.severity);
+        diagnostic.source = source;
+        results.push(diagnostic);
+      }
+    }
+    this.collection.set(document.uri, results);
+  }
+
+  /** Whichever diagnostics API this VS Code build exposes for `uri`; [] (never throws) if none is available. */
+  async providerDiagnostics(uri) {
+    if (vscode.languages && vscode.languages.getDiagnostics) {
+      return (await vscode.languages.getDiagnostics(uri)) || [];
+    }
+    if (vscode.commands && vscode.commands.executeCommand) {
+      try {
+        return (await vscode.commands.executeCommand("vscode.executeDiagnosticProvider", uri)) || [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+}
 
 /**
  * Finds the span under `position` - an `@{ }` echo hole, a bare `={ }` attribute expression, a directive's own
@@ -920,10 +984,15 @@ function activate(context) {
   }
 
   // problems are refreshed when a file opens or changes (a short delay while typing), and when settings change
+  const embeddedDiagnostics = new EmbeddedDiagnostics(vscode.languages.createDiagnosticCollection("cast-embedded"));
+  context.subscriptions.push({ dispose: () => embeddedDiagnostics.collection.dispose && embeddedDiagnostics.collection.dispose() });
   const timers = new Map();
   const refresh = (document) => {
     clearTimeout(timers.get(document.uri.fsPath));
-    timers.set(document.uri.fsPath, setTimeout(() => publishDiagnostics(document, diagnostics), 250));
+    timers.set(document.uri.fsPath, setTimeout(() => {
+      publishDiagnostics(document, diagnostics);
+      embeddedDiagnostics.refresh(document);
+    }, 250));
   };
   if (vscode.workspace.onDidOpenTextDocument) {
     context.subscriptions.push(
@@ -932,7 +1001,10 @@ function activate(context) {
         refresh(e.document);
         autoIndent(e);
       }),
-      vscode.workspace.onDidCloseTextDocument((d) => diagnostics.delete(d.uri)),
+      vscode.workspace.onDidCloseTextDocument((d) => {
+        diagnostics.delete(d.uri);
+        embeddedDiagnostics.collection.delete(d.uri);
+      }),
       vscode.workspace.onDidSaveTextDocument(refresh),
       vscode.workspace.onDidChangeConfiguration(() => (vscode.workspace.textDocuments || []).forEach(refresh))
     );
@@ -950,4 +1022,4 @@ function deactivate() {
   return client ? client.stop() : undefined;
 }
 
-module.exports = { activate, deactivate, references, locations, publishDiagnostics, spell, indentEdits, autoIndent, Formatter, startLanguageClient, resolveServerCommand };
+module.exports = { activate, deactivate, references, locations, publishDiagnostics, spell, indentEdits, autoIndent, Formatter, EmbeddedDiagnostics, startLanguageClient, resolveServerCommand };
