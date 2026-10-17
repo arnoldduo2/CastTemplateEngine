@@ -164,3 +164,30 @@ export function analyzeCast(text: string): CastAnalysis {
   scan(text, analysis, 0, text.length);
   return analysis;
 }
+
+/**
+ * Finds real markup in the same conservative way as the engine's Props scanner.
+ * PHP tags and quoted strings are skipped so documentation such as `<Card />`
+ * inside a PHP docblock cannot make a later @props declaration invalid.
+ */
+export function firstMarkupOffset(text: string): number | null {
+  for (let cursor = 0; cursor < text.length; cursor += 1) {
+    const char = text[cursor];
+    if (char === '"' || char === "'") {
+      const quote = char;
+      cursor += 1;
+      while (cursor < text.length && text[cursor] !== quote) {
+        if (text[cursor] === '\\') cursor += 1;
+        cursor += 1;
+      }
+      continue;
+    }
+    if (char === '<' && text[cursor + 1] === '?') {
+      const tagEnd = text.indexOf('?>', cursor + 2);
+      cursor = tagEnd === -1 ? text.length : tagEnd + 1;
+      continue;
+    }
+    if (char === '<' && /[A-Za-z!\/]/.test(text[cursor + 1] ?? '')) return cursor;
+  }
+  return null;
+}

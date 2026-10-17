@@ -12,6 +12,7 @@ import {
 } from './ast.js';
 import { CastDiagnostic } from '../types.js';
 import { getCastSyntaxSpec } from '../syntaxSpec.js';
+import { analyzeCast, firstMarkupOffset } from 'cast-language-core';
 
 export class CastParser {
   private text: string = '';
@@ -137,8 +138,8 @@ export class CastParser {
     }
 
     // Check if any HTML markup precedes this block
-    const prefix = this.text.substring(0, startOffset).trim();
-    if (/<[a-zA-Z]/i.test(prefix)) {
+    const markupOffset = firstMarkupOffset(this.text);
+    if (markupOffset !== null && markupOffset < startOffset) {
       diagnostics.push({
         range: this.createRange(startOffset, startOffset + '@props'.length),
         message: '@props must be declared before any HTML markup in component views.',
@@ -264,65 +265,26 @@ export class CastParser {
   // --- Directives ---
 
   private parseDirectives(diagnostics: CastDiagnostic[]): DirectiveNode[] {
-    const directives: DirectiveNode[] = [];
-    // Directive words regex
-    const directiveRegex = /@([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\(([\s\S]*?)\))?/g;
-    let match: RegExpExecArray | null;
-
-    const blockStarts = new Set(['if', 'unless', 'isset', 'for', 'foreach', 'forelse', 'while', 'switch', 'php']);
-    const blockEnds = new Set(['endif', 'endunless', 'endisset', 'endfor', 'endforeach', 'endforelse', 'endwhile', 'endswitch', 'endphp']);
-    const intermediates = new Set(['elseif', 'else', 'empty', 'case', 'default']);
-
-    while ((match = directiveRegex.exec(this.text)) !== null) {
-      const name = match[1];
-      const hasParens = match[0].includes('(');
-      let args = match[2];
-      let endOffset = match.index + match[0].length;
-
-      // Handle properly balanced parentheses in case regex was too greedy or stopped early
-      if (hasParens) {
-        const openParenIdx = match.index + match[0].indexOf('(');
-        let depth = 1;
-        let p = openParenIdx + 1;
-        while (p < this.text.length && depth > 0) {
-          if (this.text[p] === '(') depth++;
-          else if (this.text[p] === ')') depth--;
-          p++;
-        }
-        if (depth === 0) {
-          endOffset = p;
-          args = this.text.substring(openParenIdx + 1, p - 1);
-        }
-      }
-
-      const isBlockStart = blockStarts.has(name) && !(name === 'php' && hasParens);
-      const isBlockEnd = blockEnds.has(name);
-      const isIntermediate = intermediates.has(name);
-
-      let blockType: string | undefined;
-      if (name.startsWith('end')) {
-        blockType = name.substring(3);
-      } else if (isBlockStart) {
-        blockType = name;
-      } else if (isIntermediate) {
-        if (name === 'elseif' || name === 'else') blockType = 'if';
-        else if (name === 'empty') blockType = 'forelse';
-        else if (name === 'case' || name === 'default') blockType = 'switch';
-      }
-
-      directives.push({
-        range: this.createRange(match.index, endOffset),
-        name,
-        args,
-        argsRange: args !== undefined ? this.createRange(match.index + match[0].indexOf('(') + 1, endOffset - 1) : undefined,
-        isBlockStart,
-        isBlockEnd,
-        isIntermediate,
-        blockType
+    const analysis = analyzeCast(this.text);
+    for (const diagnostic of analysis.diagnostics) {
+      diagnostics.push({
+        range: this.createRange(diagnostic.range.start, diagnostic.range.end),
+        message: diagnostic.message,
+        severity: DiagnosticSeverity.Error,
+        source: diagnostic.source,
       });
     }
-
-    return directives;
+    return analysis.directives.map((directive) => ({
+      range: this.createRange(directive.range.start, directive.range.end),
+      nameRange: this.createRange(directive.nameRange.start, directive.nameRange.end),
+      name: directive.name,
+      args: directive.argsRange?.text,
+      argsRange: directive.argsRange ? this.createRange(directive.argsRange.start, directive.argsRange.end) : undefined,
+      isBlockStart: directive.isBlockStart,
+      isBlockEnd: directive.isBlockEnd,
+      isIntermediate: directive.isIntermediate,
+      blockType: directive.blockType,
+    }));
   }
 
   // --- Components ---

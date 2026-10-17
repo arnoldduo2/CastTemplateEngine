@@ -1,2 +1,2 @@
 export * from './types.js';
-export { analyzeCast } from './regions.js';
+export { analyzeCast, firstMarkupOffset } from './regions.js';

@@ -43,6 +43,8 @@ export interface ComponentNode extends ASTNode {
 
 export interface DirectiveNode extends ASTNode {
   name: string;
+  /** Only `@` plus the directive word; arguments belong to embedded PHP. */
+  nameRange: Range;
   args?: string;
   argsRange?: Range;
   isBlockStart: boolean;
