@@ -69,10 +69,16 @@ function addRegion(analysis: CastAnalysis, kind: RegionKind, start: number, end:
   if (end > start) analysis.regions.push({ kind, range: range(analysis.text, start, end), owner });
 }
 
+function addPhpRegion(analysis: CastAnalysis, start: number, end: number, owner?: DirectiveNode): void {
+  while (start < end && /\s/.test(analysis.text[start])) start += 1;
+  while (end > start && (analysis.text[end - 1] === '\n' || analysis.text[end - 1] === '\r')) end -= 1;
+  addRegion(analysis, 'php', start, end, owner);
+}
+
 function scanEchoHole(analysis: CastAnalysis, start: number, limit: number, owner?: DirectiveNode): number {
   const parsed = balanced(analysis.text, start + 1, '}');
   if (!parsed || parsed.close >= limit) return start + 2;
-  addRegion(analysis, 'php', parsed.contentStart, parsed.contentEnd, owner);
+  addPhpRegion(analysis, parsed.contentStart, parsed.contentEnd, owner);
   return parsed.close + 1;
 }
 
@@ -90,7 +96,7 @@ function scan(text: string, analysis: CastAnalysis, start: number, end: number):
       const tagEnd = text.indexOf('?>', cursor + 2);
       if (tagEnd === -1 || tagEnd >= end) return;
       const prefixLength = text.startsWith('<?php', cursor) ? 5 : text.startsWith('<?=', cursor) ? 3 : 2;
-      addRegion(analysis, 'php', cursor + prefixLength, tagEnd);
+      addPhpRegion(analysis, cursor + prefixLength, tagEnd);
       cursor = tagEnd + 2;
       continue;
     }
@@ -131,7 +137,7 @@ function scan(text: string, analysis: CastAnalysis, start: number, end: number):
         analysis.diagnostics.push({ range: node.nameRange, message: '@php is never closed (missing @endphp)', severity: 'error', source: 'cast-engine' });
         return;
       }
-      addRegion(analysis, 'php', nameEnd, closing.index, node);
+      addPhpRegion(analysis, nameEnd, closing.index, node);
       const closeStart = closing.index;
       const closeEnd = closeStart + '@endphp'.length;
       analysis.directives.push({
@@ -148,7 +154,7 @@ function scan(text: string, analysis: CastAnalysis, start: number, end: number):
       addRegion(analysis, name === 'css' ? 'css' : 'javascript', parsed.contentStart, parsed.contentEnd, node);
       scanEmbeddedHoles(analysis, parsed.contentStart, parsed.contentEnd, node);
     } else if (parsed && PHP_ARGUMENT_DIRECTIVES.has(name)) {
-      addRegion(analysis, 'php', parsed.contentStart, parsed.contentEnd, node);
+      addPhpRegion(analysis, parsed.contentStart, parsed.contentEnd, node);
     }
     cursor = Math.max(directiveEnd, cursor + 1);
   }
