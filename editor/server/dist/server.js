@@ -17,6 +17,7 @@ const phpDelegation_js_1 = require("./features/phpDelegation.js");
 const engine_js_1 = require("./php/engine.js");
 const phpactorClient_js_1 = require("./php/phpactorClient.js");
 const phpRouter_js_1 = require("./php/phpRouter.js");
+const settings_js_1 = require("./settings.js");
 // Create connection
 const connection = (0, node_js_1.createConnection)(node_js_1.ProposedFeatures.all);
 const documents = new node_js_1.TextDocuments(vscode_languageserver_textdocument_1.TextDocument);
@@ -34,7 +35,9 @@ const formattingProvider = new formatting_js_1.FormattingProvider();
 const phpEngineManager = new engine_js_1.PhpEngineManager();
 let phpRouter = null;
 let phpDelegation = null;
+let settings = settings_js_1.DEFAULT_SETTINGS;
 connection.onInitialize(async (params) => {
+    settings = (0, settings_js_1.resolveSettings)(params.initializationOptions);
     // Collect workspace roots
     const roots = [];
     if (params.workspaceFolders) {
@@ -117,6 +120,18 @@ async function validateDocument(document) {
 }
 documents.onDidChangeContent(change => {
     void validateDocument(change.document);
+});
+// cast.* settings changed in the client (propCase, componentsPath/viewsPath/resourcesPath/extension,
+// diagnostics): re-resolve, re-index (componentDirs may have changed), and re-validate every open document, so
+// the change takes effect without a window reload. Requires clientOptions.synchronize.configurationSection
+// ('cast') on the client side (see editor/vscode/extension.js's startLanguageClient).
+connection.onDidChangeConfiguration(async () => {
+    const raw = await connection.workspace.getConfiguration('cast');
+    settings = (0, settings_js_1.resolveSettings)(raw);
+    await projectIndex.indexAll();
+    for (const document of documents.all()) {
+        await validateDocument(document);
+    }
 });
 documents.onDidClose(e => {
     parsedDocs.delete(e.document.uri);

@@ -27,6 +27,7 @@ import { PhpEngineManager } from './php/engine.js';
 import { PhpactorClient } from './php/phpactorClient.js';
 import { PhpRouter } from './php/phpRouter.js';
 import { CastDocument } from './parser/ast.js';
+import { CastSettings, DEFAULT_SETTINGS, resolveSettings } from './settings.js';
 
 // Create connection
 const connection = createConnection(ProposedFeatures.all);
@@ -46,8 +47,11 @@ const formattingProvider = new FormattingProvider();
 const phpEngineManager = new PhpEngineManager();
 let phpRouter: PhpRouter | null = null;
 let phpDelegation: PhpDelegation | null = null;
+let settings: CastSettings = DEFAULT_SETTINGS;
 
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
+  settings = resolveSettings(params.initializationOptions as Partial<CastSettings> | undefined);
+
   // Collect workspace roots
   const roots: string[] = [];
   if (params.workspaceFolders) {
@@ -133,6 +137,19 @@ async function validateDocument(document: TextDocument): Promise<void> {
 
 documents.onDidChangeContent(change => {
   void validateDocument(change.document);
+});
+
+// cast.* settings changed in the client (propCase, componentsPath/viewsPath/resourcesPath/extension,
+// diagnostics): re-resolve, re-index (componentDirs may have changed), and re-validate every open document, so
+// the change takes effect without a window reload. Requires clientOptions.synchronize.configurationSection
+// ('cast') on the client side (see editor/vscode/extension.js's startLanguageClient).
+connection.onDidChangeConfiguration(async () => {
+  const raw = await connection.workspace.getConfiguration('cast');
+  settings = resolveSettings(raw as Partial<CastSettings> | undefined);
+  await projectIndex.indexAll();
+  for (const document of documents.all()) {
+    await validateDocument(document);
+  }
 });
 
 documents.onDidClose(e => {

@@ -932,6 +932,22 @@ function showOnce(context, key, message) {
 }
 
 /**
+ * The cast.* settings the LSP needs, in the shape editor/server/src/settings.ts's CastSettings/resolveSettings
+ * expects - same defaults as locations()/the rest of this file already use, so the LSP and the extension's own
+ * engine never disagree about where components/views/resources live or how diagnostics/propCase behave.
+ */
+function castSettings(config) {
+  return {
+    propCase: config.get("propCase", "camel"),
+    componentsPath: [].concat(config.get("componentsPath", "resources/views/components")),
+    viewsPath: config.get("viewsPath", "resources/views"),
+    resourcesPath: config.get("resourcesPath", "resources"),
+    extension: config.get("extension", ".cast.php"),
+    diagnostics: config.get("diagnostics", "hint"),
+  };
+}
+
+/**
  * Starts the cast-language-server client, if enabled and found. Degrades silently (a one-time
  * toast, not an error) when the client library or the server binary isn't available yet — every
  * hand-rolled provider registered in activate() keeps working either way.
@@ -966,7 +982,14 @@ function startLanguageClient(context) {
     run: { command: launch.command, args: launch.args },
     debug: { command: launch.command, args: launch.args },
   };
-  const clientOptions = { documentSelector: [SELECTOR] };
+  // cast.* settings travel to the LSP as initializationOptions at startup, and again over
+  // workspace/didChangeConfiguration whenever they change (synchronize.configurationSection) - see
+  // editor/server/src/settings.ts's CastSettings/resolveSettings, which this shape must match.
+  const clientOptions = {
+    documentSelector: [SELECTOR],
+    synchronize: { configurationSection: "cast" },
+    initializationOptions: castSettings(config),
+  };
 
   client = new LanguageClient("castLanguageServer", "Cast Language Server", serverOptions, clientOptions);
   context.subscriptions.push({ dispose: () => client && client.stop() });
