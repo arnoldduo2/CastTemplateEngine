@@ -14,3 +14,7 @@ export { camel, spell, readType, finish, newProp, splitUnion } from './component
 export type { PropSpec } from './componentSpec/propHelpers.js';
 export { parsePropsBlock } from './componentSpec/propsBlock.js';
 export type { PropsBlockResult } from './componentSpec/propsBlock.js';
+export { realFs, variants, resolveComponent, resolveLegacyComponent, resolveView, resolveModule, propsOf } from './resolve.js';
+export type { FsLike, ResolveResult } from './resolve.js';
+export { scanHelpers, scanChainCalls } from './scan.js';
+export type { HelperRef, HelperKind, ChainRef } from './scan.js';

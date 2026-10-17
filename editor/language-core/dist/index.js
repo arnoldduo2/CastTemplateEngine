@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parsePropsBlock = exports.splitUnion = exports.newProp = exports.finish = exports.readType = exports.spell = exports.camel = exports.parseComponent = exports.indentString = exports.indentPrefix = exports.indentFor = exports.formatCast = exports.computeIndents = exports.buildEmbeddedVirtuals = exports.buildPhpVirtual = exports.SourceMap = exports.firstMarkupOffset = exports.analyzeCast = void 0;
+exports.scanChainCalls = exports.scanHelpers = exports.propsOf = exports.resolveModule = exports.resolveView = exports.resolveLegacyComponent = exports.resolveComponent = exports.variants = exports.realFs = exports.parsePropsBlock = exports.splitUnion = exports.newProp = exports.finish = exports.readType = exports.spell = exports.camel = exports.parseComponent = exports.indentString = exports.indentPrefix = exports.indentFor = exports.formatCast = exports.computeIndents = exports.buildEmbeddedVirtuals = exports.buildPhpVirtual = exports.SourceMap = exports.firstMarkupOffset = exports.analyzeCast = void 0;
 __exportStar(require("./types.js"), exports);
 var regions_js_1 = require("./regions.js");
 Object.defineProperty(exports, "analyzeCast", { enumerable: true, get: function () { return regions_js_1.analyzeCast; } });
@@ -42,4 +42,15 @@ Object.defineProperty(exports, "newProp", { enumerable: true, get: function () {
 Object.defineProperty(exports, "splitUnion", { enumerable: true, get: function () { return propHelpers_js_1.splitUnion; } });
 var propsBlock_js_1 = require("./componentSpec/propsBlock.js");
 Object.defineProperty(exports, "parsePropsBlock", { enumerable: true, get: function () { return propsBlock_js_1.parsePropsBlock; } });
+var resolve_js_1 = require("./resolve.js");
+Object.defineProperty(exports, "realFs", { enumerable: true, get: function () { return resolve_js_1.realFs; } });
+Object.defineProperty(exports, "variants", { enumerable: true, get: function () { return resolve_js_1.variants; } });
+Object.defineProperty(exports, "resolveComponent", { enumerable: true, get: function () { return resolve_js_1.resolveComponent; } });
+Object.defineProperty(exports, "resolveLegacyComponent", { enumerable: true, get: function () { return resolve_js_1.resolveLegacyComponent; } });
+Object.defineProperty(exports, "resolveView", { enumerable: true, get: function () { return resolve_js_1.resolveView; } });
+Object.defineProperty(exports, "resolveModule", { enumerable: true, get: function () { return resolve_js_1.resolveModule; } });
+Object.defineProperty(exports, "propsOf", { enumerable: true, get: function () { return resolve_js_1.propsOf; } });
+var scan_js_1 = require("./scan.js");
+Object.defineProperty(exports, "scanHelpers", { enumerable: true, get: function () { return scan_js_1.scanHelpers; } });
+Object.defineProperty(exports, "scanChainCalls", { enumerable: true, get: function () { return scan_js_1.scanChainCalls; } });
 //# sourceMappingURL=index.js.map
