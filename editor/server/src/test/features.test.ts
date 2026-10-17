@@ -44,4 +44,16 @@ describe('Language Server Features', () => {
     const result = edits[0].newText;
     assert.ok(result.includes('    <p>Active</p>'), 'Inner paragraph should be indented');
   });
+
+  test('formatting indents nested HTML tags and leaves <script> body content untouched, the same shared scanner the extension uses', () => {
+    const unformatted = '<div>\n<script>\n  let a = 1;\n      if (a) { a++ }\n</script>\n</div>';
+    const doc = parser.parse('file:///view.cast.php', unformatted);
+    const edits = formattingProvider.format(doc, { tabSize: 4, insertSpaces: true });
+
+    assert.ok(edits.length > 0, 'Should produce formatting edits');
+    const result = edits[0].newText;
+    assert.ok(result.includes('    <script>'), '<script> is indented as a child of <div>');
+    assert.ok(result.includes('  let a = 1;'), 'original interior indentation inside <script> is preserved verbatim');
+    assert.ok(result.includes('      if (a) { a++ }'), 'original interior indentation inside <script> is preserved verbatim');
+  });
 });

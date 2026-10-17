@@ -105,6 +105,12 @@ test("@php blocks keep their code; @php(...) is a statement; @@ and e-mail addre
   assert.equal(out, `<div>\n    @php\n$x = 1;\n   keep();\n    @endphp\n    @php($n = 5)\n    <p>me@if.com @@if</p>\n</div>`);
 });
 
+test("a multiline @php statement never waits for @endphp", () => {
+  const output = fmt('@php(\n  $docs = config(\n    "docs"\n  )\n)\n@props {\nstring $title;\n}\n@if ($docs)\n<nav></nav>\n@endif');
+  assert.match(output, /    string \$title;/);
+  assert.match(output, /    <nav><\/nav>/);
+});
+
 test("lines inside <script>, <style>, <pre>, <textarea>, comments and heredocs are left alone", () => {
   const src = `<div>\n<script>\n  let a = 1;\n      if (a) { a++ }\n</script>\n<style>\n a { color: red }\n</style>\n<pre>\n  keep\n   this\n  </pre>\n<!-- a\n     comment -->\n<?php\n$t = <<<EOT\n   heredoc { text\nEOT;\n?>\n<p>x</p>\n</div>`;
   const out = fmt(src).split("\n");
