@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.indentString = exports.indentPrefix = exports.indentFor = exports.formatCast = exports.computeIndents = exports.buildEmbeddedVirtuals = exports.buildPhpVirtual = exports.SourceMap = exports.firstMarkupOffset = exports.analyzeCast = void 0;
+exports.parsePropsBlock = exports.splitUnion = exports.newProp = exports.finish = exports.readType = exports.spell = exports.camel = exports.parseComponent = exports.indentString = exports.indentPrefix = exports.indentFor = exports.formatCast = exports.computeIndents = exports.buildEmbeddedVirtuals = exports.buildPhpVirtual = exports.SourceMap = exports.firstMarkupOffset = exports.analyzeCast = void 0;
 __exportStar(require("./types.js"), exports);
 var regions_js_1 = require("./regions.js");
 Object.defineProperty(exports, "analyzeCast", { enumerable: true, get: function () { return regions_js_1.analyzeCast; } });
@@ -31,4 +31,15 @@ Object.defineProperty(exports, "formatCast", { enumerable: true, get: function (
 Object.defineProperty(exports, "indentFor", { enumerable: true, get: function () { return indent_js_1.indentFor; } });
 Object.defineProperty(exports, "indentPrefix", { enumerable: true, get: function () { return indent_js_1.indentPrefix; } });
 Object.defineProperty(exports, "indentString", { enumerable: true, get: function () { return indent_js_1.indentString; } });
+var docblock_js_1 = require("./componentSpec/docblock.js");
+Object.defineProperty(exports, "parseComponent", { enumerable: true, get: function () { return docblock_js_1.parseComponent; } });
+var propHelpers_js_1 = require("./componentSpec/propHelpers.js");
+Object.defineProperty(exports, "camel", { enumerable: true, get: function () { return propHelpers_js_1.camel; } });
+Object.defineProperty(exports, "spell", { enumerable: true, get: function () { return propHelpers_js_1.spell; } });
+Object.defineProperty(exports, "readType", { enumerable: true, get: function () { return propHelpers_js_1.readType; } });
+Object.defineProperty(exports, "finish", { enumerable: true, get: function () { return propHelpers_js_1.finish; } });
+Object.defineProperty(exports, "newProp", { enumerable: true, get: function () { return propHelpers_js_1.newProp; } });
+Object.defineProperty(exports, "splitUnion", { enumerable: true, get: function () { return propHelpers_js_1.splitUnion; } });
+var propsBlock_js_1 = require("./componentSpec/propsBlock.js");
+Object.defineProperty(exports, "parsePropsBlock", { enumerable: true, get: function () { return propsBlock_js_1.parsePropsBlock; } });
 //# sourceMappingURL=index.js.map

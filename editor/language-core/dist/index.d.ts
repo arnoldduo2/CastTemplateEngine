@@ -8,4 +8,10 @@ export type { SourceMapSegment } from './sourceMap.js';
 export type { VirtualDocument, VirtualPhpDocument } from './virtualPhp.js';
 export { computeIndents, formatCast, indentFor, indentPrefix, indentString } from './indent.js';
 export type { FormatOptions } from './indent.js';
+export { parseComponent } from './componentSpec/docblock.js';
+export type { ComponentSpec, SlotSpec } from './componentSpec/docblock.js';
+export { camel, spell, readType, finish, newProp, splitUnion } from './componentSpec/propHelpers.js';
+export type { PropSpec } from './componentSpec/propHelpers.js';
+export { parsePropsBlock } from './componentSpec/propsBlock.js';
+export type { PropsBlockResult } from './componentSpec/propsBlock.js';
 //# sourceMappingURL=index.d.ts.map
