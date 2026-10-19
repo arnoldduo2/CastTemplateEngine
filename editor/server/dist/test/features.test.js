@@ -35,11 +35,16 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const node_test_1 = require("node:test");
 const assert = __importStar(require("node:assert"));
+const fs = __importStar(require("node:fs"));
+const os = __importStar(require("node:os"));
+const path = __importStar(require("node:path"));
 const vscode_languageserver_1 = require("vscode-languageserver");
 const castParser_js_1 = require("../parser/castParser.js");
 const projectIndex_js_1 = require("../index/projectIndex.js");
 const completion_js_1 = require("../features/completion.js");
 const hover_js_1 = require("../features/hover.js");
+const definition_js_1 = require("../features/definition.js");
+const documentLinks_js_1 = require("../features/documentLinks.js");
 const formatting_js_1 = require("../features/formatting.js");
 (0, node_test_1.describe)('Language Server Features', () => {
     const parser = new castParser_js_1.CastParser();
@@ -128,7 +133,47 @@ const formatting_js_1 = require("../features/formatting.js");
         const md = typeof hover.contents === 'object' && 'value' in hover.contents ? hover.contents.value : '';
         assert.match(md, /fluent chain/);
     });
+    (0, node_test_1.test)('go-to-definition on a component attribute jumps to its declaration line, not the component file start', () => {
+        const { index: rooted } = referenceFixture();
+        const definitionProvider = new definition_js_1.DefinitionProvider(rooted);
+        const doc = parser.parse('file:///view.cast.php', '<Button variant="primary" />');
+        const def = definitionProvider.getDefinition(doc, positionOfWord(doc.text, 'variant'));
+        assert.notDeepEqual(def.range, vscode_languageserver_1.Range.create(0, 0, 0, 0));
+    });
+    (0, node_test_1.test)('go-to-definition resolves a legacy Component() call', () => {
+        const { index: rooted } = referenceFixture();
+        const definitionProvider = new definition_js_1.DefinitionProvider(rooted);
+        const doc = parser.parse('file:///view.cast.php', "<?= Component('btns.add-new') ?>");
+        const def = definitionProvider.getDefinition(doc, positionOfWord(doc.text, 'btns.add-new'));
+        assert.ok(def);
+    });
+    (0, node_test_1.test)('document links include a legacy Component()/view()/module reference, same as a component tag', () => {
+        const { index: rooted } = referenceFixture();
+        const documentLinksProvider = new documentLinks_js_1.DocumentLinksProvider(rooted);
+        const doc = parser.parse('file:///view.cast.php', "<?php __includes('layouts.header'); ?>");
+        const links = documentLinksProvider.getDocumentLinks(doc);
+        assert.equal(links.length, 1);
+    });
 });
+/** A temp project with a Button component (required+enum prop, for attribute-definition and completion tests),
+ * a legacy btns/add-new.cast.php component, and a layouts/header.cast.php view (for Task 7's reference tests). */
+function referenceFixture() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cast-features-refs-'));
+    const componentsDir = path.join(root, 'resources/views/components');
+    fs.mkdirSync(path.join(componentsDir, 'btns'), { recursive: true });
+    fs.writeFileSync(path.join(componentsDir, 'Button.cast.php'), 
+    // @props{} (not a docblock @var) so the prop has a real source range CastParser tracks (parseComponent's
+    // own pure text analysis has no position tracking - see Task 4's ruling) - needed for the attribute ->
+    // declaration-line jump this fixture exists for.
+    `<?php\n@props {\n    string $variant = 'primary';\n}\n`);
+    fs.writeFileSync(path.join(componentsDir, 'btns/add-new.cast.php'), '<a></a>');
+    const viewsDir = path.join(root, 'resources/views');
+    fs.mkdirSync(path.join(viewsDir, 'layouts'), { recursive: true });
+    fs.writeFileSync(path.join(viewsDir, 'layouts/header.cast.php'), '<header></header>');
+    const index = new projectIndex_js_1.ProjectIndex([root]);
+    index.indexFile(componentsDir, path.join(componentsDir, 'Button.cast.php'), false);
+    return { root, index };
+}
 /** The {line, character} of the first occurrence of `word` in `text` - test-only convenience. */
 function positionOfWord(text, word) {
     const offset = text.indexOf(word);

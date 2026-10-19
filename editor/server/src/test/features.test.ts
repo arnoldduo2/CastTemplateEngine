@@ -1,10 +1,15 @@
 import { test, describe } from 'node:test';
 import * as assert from 'node:assert';
-import { InsertTextFormat } from 'vscode-languageserver';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { InsertTextFormat, Location, Range } from 'vscode-languageserver';
 import { CastParser } from '../parser/castParser.js';
 import { ProjectIndex } from '../index/projectIndex.js';
 import { CompletionProvider } from '../features/completion.js';
 import { HoverProvider } from '../features/hover.js';
+import { DefinitionProvider } from '../features/definition.js';
+import { DocumentLinksProvider } from '../features/documentLinks.js';
 import { FormattingProvider } from '../features/formatting.js';
 
 describe('Language Server Features', () => {
@@ -111,7 +116,54 @@ describe('Language Server Features', () => {
     const md = typeof hover!.contents === 'object' && 'value' in hover!.contents ? hover!.contents.value : '';
     assert.match(md, /fluent chain/);
   });
+
+  test('go-to-definition on a component attribute jumps to its declaration line, not the component file start', () => {
+    const { index: rooted } = referenceFixture();
+    const definitionProvider = new DefinitionProvider(rooted);
+    const doc = parser.parse('file:///view.cast.php', '<Button variant="primary" />');
+    const def = definitionProvider.getDefinition(doc, positionOfWord(doc.text, 'variant'))!;
+    assert.notDeepEqual((def as Location).range, Range.create(0, 0, 0, 0));
+  });
+
+  test('go-to-definition resolves a legacy Component() call', () => {
+    const { index: rooted } = referenceFixture();
+    const definitionProvider = new DefinitionProvider(rooted);
+    const doc = parser.parse('file:///view.cast.php', "<?= Component('btns.add-new') ?>");
+    const def = definitionProvider.getDefinition(doc, positionOfWord(doc.text, 'btns.add-new'));
+    assert.ok(def);
+  });
+
+  test('document links include a legacy Component()/view()/module reference, same as a component tag', () => {
+    const { index: rooted } = referenceFixture();
+    const documentLinksProvider = new DocumentLinksProvider(rooted);
+    const doc = parser.parse('file:///view.cast.php', "<?php __includes('layouts.header'); ?>");
+    const links = documentLinksProvider.getDocumentLinks(doc);
+    assert.equal(links.length, 1);
+  });
 });
+
+/** A temp project with a Button component (required+enum prop, for attribute-definition and completion tests),
+ * a legacy btns/add-new.cast.php component, and a layouts/header.cast.php view (for Task 7's reference tests). */
+function referenceFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cast-features-refs-'));
+  const componentsDir = path.join(root, 'resources/views/components');
+  fs.mkdirSync(path.join(componentsDir, 'btns'), { recursive: true });
+  fs.writeFileSync(
+    path.join(componentsDir, 'Button.cast.php'),
+    // @props{} (not a docblock @var) so the prop has a real source range CastParser tracks (parseComponent's
+    // own pure text analysis has no position tracking - see Task 4's ruling) - needed for the attribute ->
+    // declaration-line jump this fixture exists for.
+    `<?php\n@props {\n    string $variant = 'primary';\n}\n`
+  );
+  fs.writeFileSync(path.join(componentsDir, 'btns/add-new.cast.php'), '<a></a>');
+  const viewsDir = path.join(root, 'resources/views');
+  fs.mkdirSync(path.join(viewsDir, 'layouts'), { recursive: true });
+  fs.writeFileSync(path.join(viewsDir, 'layouts/header.cast.php'), '<header></header>');
+
+  const index = new ProjectIndex([root]);
+  index.indexFile(componentsDir, path.join(componentsDir, 'Button.cast.php'), false);
+  return { root, index };
+}
 
 /** The {line, character} of the first occurrence of `word` in `text` - test-only convenience. */
 function positionOfWord(text: string, word: string) {

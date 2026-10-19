@@ -5,8 +5,11 @@ import {
   Range
 } from 'vscode-languageserver';
 import { URI } from 'vscode-uri';
+import { camel } from 'cast-language-core';
 import { CastDocument } from '../parser/ast.js';
 import { ProjectIndex } from '../index/projectIndex.js';
+import { PropDefinition } from '../types.js';
+import { nonComponentReferences } from '../index/references.js';
 
 export class DefinitionProvider {
   constructor(private projectIndex: ProjectIndex) {}
@@ -25,7 +28,8 @@ export class DefinitionProvider {
       }
     }
 
-    // 2. Definition on Component tag <Btns.Soft>
+    // 2. Definition on Component tag <Btns.Soft>, or on one of its attributes (jump to the prop's own
+    // declaration line in the component file, when CastParser tracked one - see ProjectIndex.indexFile).
     for (const comp of doc.components) {
       if (this.positionInRange(position, comp.nameRange)) {
         const meta = this.projectIndex.getComponent(comp.name);
@@ -36,8 +40,34 @@ export class DefinitionProvider {
           );
         }
       }
+
+      for (const attr of comp.attributes) {
+        if (!attr.name || !this.positionInRange(position, attr.nameRange)) continue;
+        const meta = this.projectIndex.getComponent(comp.name);
+        if (!meta) continue;
+        const prop = this.findProp(meta.props, attr.name);
+        if (prop?.range) {
+          return Location.create(URI.file(meta.fsPath).toString(), prop.range);
+        }
+      }
     }
 
+    // 3. Legacy Component()/view()/module() references
+    for (const ref of nonComponentReferences(doc, this.projectIndex)) {
+      if (ref.file && this.positionInRange(position, ref.range)) {
+        return Location.create(URI.file(ref.file).toString(), Range.create(0, 0, 0, 0));
+      }
+    }
+
+    return null;
+  }
+
+  /** The documented prop for an attribute name, matching the engine's camelCasing (`has-label` is `hasLabel`). */
+  private findProp(props: Map<string, PropDefinition>, attributeName: string): PropDefinition | null {
+    const wanted = camel(attributeName);
+    for (const prop of props.values()) {
+      if (prop.name === attributeName || camel(prop.name) === wanted) return prop;
+    }
     return null;
   }
 

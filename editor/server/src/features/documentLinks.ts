@@ -5,6 +5,7 @@ import {
 import { URI } from 'vscode-uri';
 import { CastDocument } from '../parser/ast.js';
 import { ProjectIndex } from '../index/projectIndex.js';
+import { nonComponentReferences } from '../index/references.js';
 
 export class DocumentLinksProvider {
   constructor(private projectIndex: ProjectIndex) {}
@@ -33,6 +34,17 @@ export class DocumentLinksProvider {
           range: comp.nameRange,
           target: URI.file(meta.fsPath).toString(),
           tooltip: `Open <${comp.name} /> from ${meta.relativePath}`
+        });
+      }
+    }
+
+    // Link legacy Component()/view()/module() references
+    for (const ref of nonComponentReferences(doc, this.projectIndex)) {
+      if (ref.file) {
+        links.push({
+          range: ref.range,
+          target: URI.file(ref.file).toString(),
+          tooltip: `Open ${ref.file}`
         });
       }
     }

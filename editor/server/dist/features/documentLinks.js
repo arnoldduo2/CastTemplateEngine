@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DocumentLinksProvider = void 0;
 const vscode_uri_1 = require("vscode-uri");
+const references_js_1 = require("../index/references.js");
 class DocumentLinksProvider {
     projectIndex;
     constructor(projectIndex) {
@@ -30,6 +31,16 @@ class DocumentLinksProvider {
                     range: comp.nameRange,
                     target: vscode_uri_1.URI.file(meta.fsPath).toString(),
                     tooltip: `Open <${comp.name} /> from ${meta.relativePath}`
+                });
+            }
+        }
+        // Link legacy Component()/view()/module() references
+        for (const ref of (0, references_js_1.nonComponentReferences)(doc, this.projectIndex)) {
+            if (ref.file) {
+                links.push({
+                    range: ref.range,
+                    target: vscode_uri_1.URI.file(ref.file).toString(),
+                    tooltip: `Open ${ref.file}`
                 });
             }
         }
