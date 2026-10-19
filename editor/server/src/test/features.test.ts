@@ -3,7 +3,7 @@ import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { InsertTextFormat, Location, Range } from 'vscode-languageserver';
+import { CompletionItemKind, InsertTextFormat, Location, Range, TextEdit } from 'vscode-languageserver';
 import { CastParser } from '../parser/castParser.js';
 import { ProjectIndex } from '../index/projectIndex.js';
 import { CompletionProvider } from '../features/completion.js';
@@ -11,6 +11,7 @@ import { HoverProvider } from '../features/hover.js';
 import { DefinitionProvider } from '../features/definition.js';
 import { DocumentLinksProvider } from '../features/documentLinks.js';
 import { FormattingProvider } from '../features/formatting.js';
+import { DEFAULT_SETTINGS } from '../settings.js';
 
 describe('Language Server Features', () => {
   const parser = new CastParser();
@@ -140,6 +141,48 @@ describe('Language Server Features', () => {
     const links = documentLinksProvider.getDocumentLinks(doc);
     assert.equal(links.length, 1);
   });
+
+  test('slot completion inside a known parent component lists only its declared slots, with descriptions', () => {
+    const { index: rooted } = completionFixture();
+    const provider = new CompletionProvider(rooted);
+    const text = '<Card><Slot name="" /></Card>';
+    const doc = parser.parse('file:///view.cast.php', text);
+    const offset = text.indexOf('name="') + 'name="'.length;
+    const items = provider.getCompletions(doc, { line: 0, character: offset });
+    assert.deepEqual(items.map(i => i.label), ['icon', 'title']);
+  });
+
+  test('attribute completion skips an attribute already written on the tag', () => {
+    const { index: rooted } = completionFixture();
+    const provider = new CompletionProvider(rooted);
+    const text = '<Button variant="primary" ';
+    const doc = parser.parse('file:///view.cast.php', text);
+    const items = provider.getCompletions(doc, { line: 0, character: text.length });
+    assert.equal(items.some(i => i.label === 'variant'), false);
+  });
+
+  test('attribute completion spells the name per cast.propCase and snippets by prop kind', () => {
+    const { index: rooted } = completionFixture();
+    const provider = new CompletionProvider(rooted);
+    provider.setSettings({ ...DEFAULT_SETTINGS, propCase: 'kebab' });
+    const text = '<Button ';
+    const doc = parser.parse('file:///view.cast.php', text);
+    const items = provider.getCompletions(doc, { line: 0, character: text.length });
+    const item = items.find(i => i.label === 'has-label')!;
+    assert.ok(item, 'should offer the bool prop spelled as kebab-case');
+    assert.match((item.textEdit as TextEdit).newText, /^has-label$/); // bool prop: no value placeholder
+  });
+
+  test("value completion inside an attribute offers the prop's declared enum values", () => {
+    const { index: rooted } = completionFixture();
+    const provider = new CompletionProvider(rooted);
+    const text = '<Button variant="" />';
+    const doc = parser.parse('file:///view.cast.php', text);
+    const offset = text.indexOf('variant="') + 'variant="'.length;
+    const items = provider.getCompletions(doc, { line: 0, character: offset });
+    assert.deepEqual(items.map(i => i.label), ['primary', 'secondary', 'ghost']);
+    assert.ok(items.every(i => i.kind === CompletionItemKind.EnumMember));
+  });
 });
 
 /** A temp project with a Button component (required+enum prop, for attribute-definition and completion tests),
@@ -161,6 +204,27 @@ function referenceFixture() {
   fs.writeFileSync(path.join(viewsDir, 'layouts/header.cast.php'), '<header></header>');
 
   const index = new ProjectIndex([root]);
+  index.indexFile(componentsDir, path.join(componentsDir, 'Button.cast.php'), false);
+  return { root, index };
+}
+
+/** A temp project with a Card component (declared slots `icon`/`title`, for slot completion) and a Button
+ * component (an enum `variant` prop and a bool `hasLabel` prop, for attribute/value/propCase completion). */
+function completionFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cast-features-completion-'));
+  const componentsDir = path.join(root, 'resources/views/components');
+  fs.mkdirSync(componentsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(componentsDir, 'Card.cast.php'),
+    `<?php\n/**\n * Card component\n * @slot icon Icon shown before the title\n * @slot title Heading content\n */\n`
+  );
+  fs.writeFileSync(
+    path.join(componentsDir, 'Button.cast.php'),
+    `<?php\n/**\n * Button component\n * @var string $variant Visual style, e.g. "primary", "secondary", "ghost"\n * @var bool $hasLabel Whether to render the visible label\n */\n`
+  );
+
+  const index = new ProjectIndex([root]);
+  index.indexFile(componentsDir, path.join(componentsDir, 'Card.cast.php'), false);
   index.indexFile(componentsDir, path.join(componentsDir, 'Button.cast.php'), false);
   return { root, index };
 }

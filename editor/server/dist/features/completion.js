@@ -2,12 +2,19 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CompletionProvider = void 0;
 const vscode_languageserver_1 = require("vscode-languageserver");
+const cast_language_core_1 = require("cast-language-core");
 const syntaxSpec_js_1 = require("../syntaxSpec.js");
+const settings_js_1 = require("../settings.js");
 class CompletionProvider {
     projectIndex;
     syntax = (0, syntaxSpec_js_1.getCastSyntaxSpec)();
+    settings = settings_js_1.DEFAULT_SETTINGS;
     constructor(projectIndex) {
         this.projectIndex = projectIndex;
+    }
+    /** The resolved cast.* settings (propCase, for attribute-name spelling) - see server.ts's onDidChangeConfiguration. */
+    setSettings(settings) {
+        this.settings = settings;
     }
     getCompletions(doc, position) {
         const lineText = doc.text.split('\n')[position.line] || '';
@@ -22,16 +29,45 @@ class CompletionProvider {
             const range = vscode_languageserver_1.Range.create(position.line, prefix.length - directiveMatch[0].length, position.line, position.character);
             return this.getDirectiveCompletions(range);
         }
-        // 3. Inside a Component tag (attributes completion)
-        const tagContext = this.findComponentTagContext(doc, position);
-        if (tagContext) {
-            return this.getAttributeCompletions(tagContext);
+        // 3. Component-tag-adjacent: tag name, attribute name, attribute value, or <Slot name="...">. One shared
+        // "what is being typed" scan (contextAt, cast-language-core) instead of two separate heuristics, so the LSP
+        // never drifts from the extension's own completion behavior - see Task 8 of the Cast LSP Precedence plan.
+        const offset = this.offsetAt(doc.text, position);
+        const context = (0, cast_language_core_1.contextAt)(doc.text, offset);
+        if (!context)
+            return [];
+        const range = (a, b) => vscode_languageserver_1.Range.create(this.positionAt(doc.text, a), this.positionAt(doc.text, b));
+        if (context.type === 'tag') {
+            return this.getComponentTagCompletions(range(context.start, context.end));
         }
-        // 4. Tags completion (<...)
-        if (/<([A-Za-z0-9_.]*)$/.test(prefix)) {
-            return this.getComponentTagCompletions();
+        if (context.type === 'slot') {
+            const parent = context.parent ? this.projectIndex.getComponent(context.parent.name) : undefined;
+            return (parent?.slots ?? []).map((slot) => ({
+                label: slot.name,
+                kind: vscode_languageserver_1.CompletionItemKind.Field,
+                detail: slot.description,
+                textEdit: vscode_languageserver_1.TextEdit.replace(range(context.start, context.end), slot.name)
+            }));
+        }
+        if (context.type === 'attribute') {
+            return this.getAttributeCompletions(context.ref.name, context.used, range(context.start, context.end));
+        }
+        if (context.type === 'value' && context.attr.name) {
+            return this.getValueCompletions(context.ref.name, context.attr.name, context.quoted, range(context.start, context.end));
         }
         return [];
+    }
+    offsetAt(text, position) {
+        const lines = text.split('\n');
+        let offset = 0;
+        for (let i = 0; i < position.line; i++)
+            offset += lines[i].length + 1;
+        return offset + position.character;
+    }
+    positionAt(text, offset) {
+        const prefix = text.slice(0, offset);
+        const lines = prefix.split('\n');
+        return { line: lines.length - 1, character: lines[lines.length - 1].length };
     }
     getDirectiveCompletions(range) {
         const items = [];
@@ -109,27 +145,28 @@ class CompletionProvider {
         });
         return items;
     }
-    getComponentTagCompletions() {
+    getComponentTagCompletions(range) {
         const items = [];
         const components = this.projectIndex.getAllComponents();
         for (const comp of components) {
             // Build snippet including required props
             let snippet = `${comp.tag}`;
             let propIndex = 1;
-            for (const [pName, pDef] of comp.props.entries()) {
-                if (pDef.isRequired) {
-                    snippet += ` ${pName}="\${${propIndex}:${pDef.defaultValue ?? pName}}"`;
+            for (const prop of comp.props.values()) {
+                if (prop.isRequired) {
+                    const name = (0, cast_language_core_1.spell)(prop.name, this.settings.propCase);
+                    snippet += ` ${name}="\${${propIndex}:${prop.defaultValue ?? prop.name}}"`;
                     propIndex++;
                 }
             }
-            snippet += ` />$0`;
+            snippet += ' />$0';
             const frameworkTag = comp.isFramework ? ' (framework)' : '';
             items.push({
                 label: comp.tag,
                 kind: vscode_languageserver_1.CompletionItemKind.Class,
                 detail: `<${comp.tag} />${frameworkTag}`,
                 documentation: comp.description || `Component from ${comp.relativePath}`,
-                insertText: snippet,
+                textEdit: vscode_languageserver_1.TextEdit.replace(range, snippet),
                 insertTextFormat: vscode_languageserver_1.InsertTextFormat.Snippet
             });
         }
@@ -139,29 +176,62 @@ class CompletionProvider {
             kind: vscode_languageserver_1.CompletionItemKind.Class,
             detail: '<Slot name="..." />',
             documentation: 'Inject content into a named component prop.',
-            insertText: 'Slot name="${1:name}">\n\t$0\n</Slot>',
+            textEdit: vscode_languageserver_1.TextEdit.replace(range, 'Slot name="${1:name}">\n\t$0\n</Slot>'),
             insertTextFormat: vscode_languageserver_1.InsertTextFormat.Snippet
         });
         return items;
     }
-    getAttributeCompletions(tag) {
+    getAttributeCompletions(tag, used, range) {
         const meta = this.projectIndex.getComponent(tag);
         if (!meta)
             return [];
         const items = [];
-        for (const [name, prop] of meta.props.entries()) {
-            const isString = prop.type.includes('string');
-            const snippet = isString ? `${name}="\${1:${prop.defaultValue ?? ''}}"$0` : `${name}={\${1:${prop.defaultValue ?? ''}}}$0`;
-            items.push({
+        for (const prop of meta.props.values()) {
+            if (used.has((0, cast_language_core_1.camel)(prop.name)))
+                continue;
+            const name = (0, cast_language_core_1.spell)(prop.name, this.settings.propCase);
+            const kind = prop.kind ?? 'other';
+            const values = prop.values ?? [];
+            const placeholder = values.length ? `\${1|${values.join(',')}|}` : '$1';
+            const snippet = kind === 'bool' ? name : kind === 'string' ? `${name}="${placeholder}"` : `${name}={$1}`;
+            const item = {
                 label: name,
                 kind: vscode_languageserver_1.CompletionItemKind.Property,
-                detail: `${prop.type}${prop.isRequired ? ' (required)' : ''}`,
-                documentation: prop.description || (prop.defaultValue !== undefined ? `Default: ${prop.defaultValue}` : undefined),
-                insertText: snippet,
+                detail: [prop.type, prop.isRequired ? 'required' : prop.defaultValue !== undefined ? `default ${prop.defaultValue}` : 'optional'].filter(Boolean).join(' · '),
+                documentation: prop.description,
+                textEdit: vscode_languageserver_1.TextEdit.replace(range, snippet),
                 insertTextFormat: vscode_languageserver_1.InsertTextFormat.Snippet
-            });
+            };
+            if (kind !== 'bool')
+                item.command = { command: 'editor.action.triggerSuggest', title: 'values' };
+            items.push(item);
         }
         return items;
+    }
+    getValueCompletions(tag, attributeName, quoted, range) {
+        const meta = this.projectIndex.getComponent(tag);
+        if (!meta)
+            return [];
+        const prop = this.findProp(meta.props, attributeName);
+        if (!prop)
+            return [];
+        const kind = prop.kind ?? 'other';
+        const values = kind === 'bool' ? ['true', 'false'] : prop.values ?? [];
+        return values.map((value) => ({
+            label: value,
+            kind: vscode_languageserver_1.CompletionItemKind.EnumMember,
+            detail: prop.name,
+            textEdit: vscode_languageserver_1.TextEdit.replace(range, kind === 'bool' ? (quoted ? value : `{${value}}`) : quoted ? value : `"${value}"`)
+        }));
+    }
+    /** The documented prop for an attribute name, matching the engine's camelCasing (`has-label` is `hasLabel`). */
+    findProp(props, attributeName) {
+        const wanted = (0, cast_language_core_1.camel)(attributeName);
+        for (const prop of props.values()) {
+            if (prop.name === attributeName || (0, cast_language_core_1.camel)(prop.name) === wanted)
+                return prop;
+        }
+        return null;
     }
     getExtendsCompletions() {
         const items = [];
@@ -174,16 +244,6 @@ class CompletionProvider {
             });
         }
         return items;
-    }
-    findComponentTagContext(doc, position) {
-        for (const comp of doc.components) {
-            if (!comp.isClosing &&
-                comp.range.start.line <= position.line &&
-                comp.range.end.line >= position.line) {
-                return comp.name;
-            }
-        }
-        return null;
     }
 }
 exports.CompletionProvider = CompletionProvider;

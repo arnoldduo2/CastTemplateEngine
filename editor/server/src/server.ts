@@ -51,6 +51,7 @@ let settings: CastSettings = DEFAULT_SETTINGS;
 
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
   settings = resolveSettings(params.initializationOptions as Partial<CastSettings> | undefined);
+  completionProvider.setSettings(settings);
 
   // Collect workspace roots
   const roots: string[] = [];
@@ -146,6 +147,7 @@ documents.onDidChangeContent(change => {
 connection.onDidChangeConfiguration(async () => {
   const raw = await connection.workspace.getConfiguration('cast');
   settings = resolveSettings(raw as Partial<CastSettings> | undefined);
+  completionProvider.setSettings(settings);
   await projectIndex.indexAll();
   for (const document of documents.all()) {
     await validateDocument(document);

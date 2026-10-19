@@ -38,6 +38,7 @@ let phpDelegation = null;
 let settings = settings_js_1.DEFAULT_SETTINGS;
 connection.onInitialize(async (params) => {
     settings = (0, settings_js_1.resolveSettings)(params.initializationOptions);
+    completionProvider.setSettings(settings);
     // Collect workspace roots
     const roots = [];
     if (params.workspaceFolders) {
@@ -128,6 +129,7 @@ documents.onDidChangeContent(change => {
 connection.onDidChangeConfiguration(async () => {
     const raw = await connection.workspace.getConfiguration('cast');
     settings = (0, settings_js_1.resolveSettings)(raw);
+    completionProvider.setSettings(settings);
     await projectIndex.indexAll();
     for (const document of documents.all()) {
         await validateDocument(document);

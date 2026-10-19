@@ -46,6 +46,7 @@ const hover_js_1 = require("../features/hover.js");
 const definition_js_1 = require("../features/definition.js");
 const documentLinks_js_1 = require("../features/documentLinks.js");
 const formatting_js_1 = require("../features/formatting.js");
+const settings_js_1 = require("../settings.js");
 (0, node_test_1.describe)('Language Server Features', () => {
     const parser = new castParser_js_1.CastParser();
     const index = new projectIndex_js_1.ProjectIndex();
@@ -154,6 +155,44 @@ const formatting_js_1 = require("../features/formatting.js");
         const links = documentLinksProvider.getDocumentLinks(doc);
         assert.equal(links.length, 1);
     });
+    (0, node_test_1.test)('slot completion inside a known parent component lists only its declared slots, with descriptions', () => {
+        const { index: rooted } = completionFixture();
+        const provider = new completion_js_1.CompletionProvider(rooted);
+        const text = '<Card><Slot name="" /></Card>';
+        const doc = parser.parse('file:///view.cast.php', text);
+        const offset = text.indexOf('name="') + 'name="'.length;
+        const items = provider.getCompletions(doc, { line: 0, character: offset });
+        assert.deepEqual(items.map(i => i.label), ['icon', 'title']);
+    });
+    (0, node_test_1.test)('attribute completion skips an attribute already written on the tag', () => {
+        const { index: rooted } = completionFixture();
+        const provider = new completion_js_1.CompletionProvider(rooted);
+        const text = '<Button variant="primary" ';
+        const doc = parser.parse('file:///view.cast.php', text);
+        const items = provider.getCompletions(doc, { line: 0, character: text.length });
+        assert.equal(items.some(i => i.label === 'variant'), false);
+    });
+    (0, node_test_1.test)('attribute completion spells the name per cast.propCase and snippets by prop kind', () => {
+        const { index: rooted } = completionFixture();
+        const provider = new completion_js_1.CompletionProvider(rooted);
+        provider.setSettings({ ...settings_js_1.DEFAULT_SETTINGS, propCase: 'kebab' });
+        const text = '<Button ';
+        const doc = parser.parse('file:///view.cast.php', text);
+        const items = provider.getCompletions(doc, { line: 0, character: text.length });
+        const item = items.find(i => i.label === 'has-label');
+        assert.ok(item, 'should offer the bool prop spelled as kebab-case');
+        assert.match(item.textEdit.newText, /^has-label$/); // bool prop: no value placeholder
+    });
+    (0, node_test_1.test)("value completion inside an attribute offers the prop's declared enum values", () => {
+        const { index: rooted } = completionFixture();
+        const provider = new completion_js_1.CompletionProvider(rooted);
+        const text = '<Button variant="" />';
+        const doc = parser.parse('file:///view.cast.php', text);
+        const offset = text.indexOf('variant="') + 'variant="'.length;
+        const items = provider.getCompletions(doc, { line: 0, character: offset });
+        assert.deepEqual(items.map(i => i.label), ['primary', 'secondary', 'ghost']);
+        assert.ok(items.every(i => i.kind === vscode_languageserver_1.CompletionItemKind.EnumMember));
+    });
 });
 /** A temp project with a Button component (required+enum prop, for attribute-definition and completion tests),
  * a legacy btns/add-new.cast.php component, and a layouts/header.cast.php view (for Task 7's reference tests). */
@@ -171,6 +210,19 @@ function referenceFixture() {
     fs.mkdirSync(path.join(viewsDir, 'layouts'), { recursive: true });
     fs.writeFileSync(path.join(viewsDir, 'layouts/header.cast.php'), '<header></header>');
     const index = new projectIndex_js_1.ProjectIndex([root]);
+    index.indexFile(componentsDir, path.join(componentsDir, 'Button.cast.php'), false);
+    return { root, index };
+}
+/** A temp project with a Card component (declared slots `icon`/`title`, for slot completion) and a Button
+ * component (an enum `variant` prop and a bool `hasLabel` prop, for attribute/value/propCase completion). */
+function completionFixture() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cast-features-completion-'));
+    const componentsDir = path.join(root, 'resources/views/components');
+    fs.mkdirSync(componentsDir, { recursive: true });
+    fs.writeFileSync(path.join(componentsDir, 'Card.cast.php'), `<?php\n/**\n * Card component\n * @slot icon Icon shown before the title\n * @slot title Heading content\n */\n`);
+    fs.writeFileSync(path.join(componentsDir, 'Button.cast.php'), `<?php\n/**\n * Button component\n * @var string $variant Visual style, e.g. "primary", "secondary", "ghost"\n * @var bool $hasLabel Whether to render the visible label\n */\n`);
+    const index = new projectIndex_js_1.ProjectIndex([root]);
+    index.indexFile(componentsDir, path.join(componentsDir, 'Card.cast.php'), false);
     index.indexFile(componentsDir, path.join(componentsDir, 'Button.cast.php'), false);
     return { root, index };
 }

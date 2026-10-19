@@ -19,4 +19,6 @@ export type { FsLike, ResolveResult } from './resolve.js';
 export { scanHelpers, scanChainCalls } from './scan.js';
 export type { HelperRef, HelperKind, ChainRef } from './scan.js';
 export { BUILTIN_HOVERS, ECHO_HOLE_HOVER, CHAIN_HOVER } from './hoverText.js';
+export { scanComponents, contextAt, parentOf } from './completionContext.js';
+export type { ComponentTagRef, ComponentAttrRef, CompletionContext } from './completionContext.js';
 //# sourceMappingURL=index.d.ts.map

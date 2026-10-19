@@ -6,14 +6,23 @@ import {
   Range,
   TextEdit
 } from 'vscode-languageserver';
+import { camel, contextAt, spell } from 'cast-language-core';
 import { CastDocument } from '../parser/ast.js';
 import { ProjectIndex } from '../index/projectIndex.js';
+import { PropDefinition } from '../types.js';
 import { getCastSyntaxSpec } from '../syntaxSpec.js';
+import { CastSettings, DEFAULT_SETTINGS } from '../settings.js';
 
 export class CompletionProvider {
   private syntax = getCastSyntaxSpec();
+  private settings: CastSettings = DEFAULT_SETTINGS;
 
   constructor(private projectIndex: ProjectIndex) {}
+
+  /** The resolved cast.* settings (propCase, for attribute-name spelling) - see server.ts's onDidChangeConfiguration. */
+  public setSettings(settings: CastSettings): void {
+    this.settings = settings;
+  }
 
   public getCompletions(doc: CastDocument, position: Position): CompletionItem[] {
     const lineText = doc.text.split('\n')[position.line] || '';
@@ -31,18 +40,47 @@ export class CompletionProvider {
       return this.getDirectiveCompletions(range);
     }
 
-    // 3. Inside a Component tag (attributes completion)
-    const tagContext = this.findComponentTagContext(doc, position);
-    if (tagContext) {
-      return this.getAttributeCompletions(tagContext);
-    }
+    // 3. Component-tag-adjacent: tag name, attribute name, attribute value, or <Slot name="...">. One shared
+    // "what is being typed" scan (contextAt, cast-language-core) instead of two separate heuristics, so the LSP
+    // never drifts from the extension's own completion behavior - see Task 8 of the Cast LSP Precedence plan.
+    const offset = this.offsetAt(doc.text, position);
+    const context = contextAt(doc.text, offset);
+    if (!context) return [];
 
-    // 4. Tags completion (<...)
-    if (/<([A-Za-z0-9_.]*)$/.test(prefix)) {
-      return this.getComponentTagCompletions();
-    }
+    const range = (a: number, b: number) => Range.create(this.positionAt(doc.text, a), this.positionAt(doc.text, b));
 
+    if (context.type === 'tag') {
+      return this.getComponentTagCompletions(range(context.start, context.end));
+    }
+    if (context.type === 'slot') {
+      const parent = context.parent ? this.projectIndex.getComponent(context.parent.name) : undefined;
+      return (parent?.slots ?? []).map((slot) => ({
+        label: slot.name,
+        kind: CompletionItemKind.Field,
+        detail: slot.description,
+        textEdit: TextEdit.replace(range(context.start, context.end), slot.name)
+      }));
+    }
+    if (context.type === 'attribute') {
+      return this.getAttributeCompletions(context.ref.name, context.used, range(context.start, context.end));
+    }
+    if (context.type === 'value' && context.attr.name) {
+      return this.getValueCompletions(context.ref.name, context.attr.name, context.quoted, range(context.start, context.end));
+    }
     return [];
+  }
+
+  private offsetAt(text: string, position: Position): number {
+    const lines = text.split('\n');
+    let offset = 0;
+    for (let i = 0; i < position.line; i++) offset += lines[i].length + 1;
+    return offset + position.character;
+  }
+
+  private positionAt(text: string, offset: number): Position {
+    const prefix = text.slice(0, offset);
+    const lines = prefix.split('\n');
+    return { line: lines.length - 1, character: lines[lines.length - 1].length };
   }
 
   private getDirectiveCompletions(range: Range): CompletionItem[] {
@@ -133,7 +171,7 @@ export class CompletionProvider {
     return items;
   }
 
-  private getComponentTagCompletions(): CompletionItem[] {
+  private getComponentTagCompletions(range: Range): CompletionItem[] {
     const items: CompletionItem[] = [];
     const components = this.projectIndex.getAllComponents();
 
@@ -141,13 +179,14 @@ export class CompletionProvider {
       // Build snippet including required props
       let snippet = `${comp.tag}`;
       let propIndex = 1;
-      for (const [pName, pDef] of comp.props.entries()) {
-        if (pDef.isRequired) {
-          snippet += ` ${pName}="\${${propIndex}:${pDef.defaultValue ?? pName}}"`;
+      for (const prop of comp.props.values()) {
+        if (prop.isRequired) {
+          const name = spell(prop.name, this.settings.propCase);
+          snippet += ` ${name}="\${${propIndex}:${prop.defaultValue ?? prop.name}}"`;
           propIndex++;
         }
       }
-      snippet += ` />$0`;
+      snippet += ' />$0';
 
       const frameworkTag = comp.isFramework ? ' (framework)' : '';
       items.push({
@@ -155,7 +194,7 @@ export class CompletionProvider {
         kind: CompletionItemKind.Class,
         detail: `<${comp.tag} />${frameworkTag}`,
         documentation: comp.description || `Component from ${comp.relativePath}`,
-        insertText: snippet,
+        textEdit: TextEdit.replace(range, snippet),
         insertTextFormat: InsertTextFormat.Snippet
       });
     }
@@ -166,33 +205,66 @@ export class CompletionProvider {
       kind: CompletionItemKind.Class,
       detail: '<Slot name="..." />',
       documentation: 'Inject content into a named component prop.',
-      insertText: 'Slot name="${1:name}">\n\t$0\n</Slot>',
+      textEdit: TextEdit.replace(range, 'Slot name="${1:name}">\n\t$0\n</Slot>'),
       insertTextFormat: InsertTextFormat.Snippet
     });
 
     return items;
   }
 
-  private getAttributeCompletions(tag: string): CompletionItem[] {
+  private getAttributeCompletions(tag: string, used: Set<string>, range: Range): CompletionItem[] {
     const meta = this.projectIndex.getComponent(tag);
     if (!meta) return [];
 
     const items: CompletionItem[] = [];
-    for (const [name, prop] of meta.props.entries()) {
-      const isString = prop.type.includes('string');
-      const snippet = isString ? `${name}="\${1:${prop.defaultValue ?? ''}}"$0` : `${name}={\${1:${prop.defaultValue ?? ''}}}$0`;
+    for (const prop of meta.props.values()) {
+      if (used.has(camel(prop.name))) continue;
 
-      items.push({
+      const name = spell(prop.name, this.settings.propCase);
+      const kind = prop.kind ?? 'other';
+      const values = prop.values ?? [];
+      const placeholder = values.length ? `\${1|${values.join(',')}|}` : '$1';
+      const snippet = kind === 'bool' ? name : kind === 'string' ? `${name}="${placeholder}"` : `${name}={$1}`;
+
+      const item: CompletionItem = {
         label: name,
         kind: CompletionItemKind.Property,
-        detail: `${prop.type}${prop.isRequired ? ' (required)' : ''}`,
-        documentation: prop.description || (prop.defaultValue !== undefined ? `Default: ${prop.defaultValue}` : undefined),
-        insertText: snippet,
+        detail: [prop.type, prop.isRequired ? 'required' : prop.defaultValue !== undefined ? `default ${prop.defaultValue}` : 'optional'].filter(Boolean).join(' · '),
+        documentation: prop.description,
+        textEdit: TextEdit.replace(range, snippet),
         insertTextFormat: InsertTextFormat.Snippet
-      });
+      };
+      if (kind !== 'bool') item.command = { command: 'editor.action.triggerSuggest', title: 'values' };
+      items.push(item);
     }
 
     return items;
+  }
+
+  private getValueCompletions(tag: string, attributeName: string, quoted: boolean, range: Range): CompletionItem[] {
+    const meta = this.projectIndex.getComponent(tag);
+    if (!meta) return [];
+    const prop = this.findProp(meta.props, attributeName);
+    if (!prop) return [];
+
+    const kind = prop.kind ?? 'other';
+    const values = kind === 'bool' ? ['true', 'false'] : prop.values ?? [];
+
+    return values.map((value) => ({
+      label: value,
+      kind: CompletionItemKind.EnumMember,
+      detail: prop.name,
+      textEdit: TextEdit.replace(range, kind === 'bool' ? (quoted ? value : `{${value}}`) : quoted ? value : `"${value}"`)
+    }));
+  }
+
+  /** The documented prop for an attribute name, matching the engine's camelCasing (`has-label` is `hasLabel`). */
+  private findProp(props: Map<string, PropDefinition>, attributeName: string): PropDefinition | null {
+    const wanted = camel(attributeName);
+    for (const prop of props.values()) {
+      if (prop.name === attributeName || camel(prop.name) === wanted) return prop;
+    }
+    return null;
   }
 
   private getExtendsCompletions(): CompletionItem[] {
@@ -208,16 +280,4 @@ export class CompletionProvider {
     return items;
   }
 
-  private findComponentTagContext(doc: CastDocument, position: Position): string | null {
-    for (const comp of doc.components) {
-      if (
-        !comp.isClosing &&
-        comp.range.start.line <= position.line &&
-        comp.range.end.line >= position.line
-      ) {
-        return comp.name;
-      }
-    }
-    return null;
-  }
 }
