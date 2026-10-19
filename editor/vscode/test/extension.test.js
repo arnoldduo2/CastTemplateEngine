@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const Module = require("node:module");
 const { create, document, Position } = require("./mock-vscode");
+const mockLanguageClient = require("./mock-languageclient");
 
 /** A project on disk with the given files; returns the activated providers. */
 function project(files, settings = {}) {
@@ -27,6 +28,48 @@ function project(files, settings = {}) {
 }
 
 const VIEW = "resources/views/items/items.cast.php";
+
+/** Like project(), but also intercepts "vscode-languageclient/node" with a controllable fake client (the real
+ * package can't construct against mock-vscode.js's lightweight surface - see "activate() registers the
+ * extension's own Formatter as a fallback" above), and gives resolveServerCommand() a real file to resolve
+ * cast.languageServer.path to, so startLanguageClient actually constructs and starts a client instead of taking
+ * its "client library not installed"/"server not found" early-return branches. fireLspState(stateName) simulates
+ * the client reporting a state change ('Running', 'Stopped', ...) and lets any resulting handler run. */
+function projectWithFakeLanguageClient(files, settings = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cast-ext-lsp-"));
+  for (const [rel, content] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), content);
+  }
+  const serverPath = path.join(root, "fake-server.js");
+  fs.writeFileSync(serverPath, "");
+
+  const vscode = create({ root, settings: { ...settings, "languageServer.path": serverPath } });
+  const fakeClient = mockLanguageClient.create();
+  const original = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "vscode") return vscode;
+    if (request === "vscode-languageclient/node") return fakeClient;
+    return original.call(this, request, ...rest);
+  };
+  delete require.cache[require.resolve("../extension")];
+  const extension = require("../extension");
+  // Not restored until after activate(): startLanguageClient() (called from activate(), not at module load time)
+  // is where "vscode-languageclient/node" actually gets required, and it must see the fake module too.
+  extension.activate({ subscriptions: [], globalState: vscode.globalState });
+  Module._load = original;
+
+  return {
+    root,
+    providers: vscode.providers,
+    extension,
+    vscode,
+    fireLspState: async (stateName) => {
+      fakeClient.fire(stateName);
+      await new Promise((r) => setImmediate(r));
+    },
+  };
+}
 
 test("activation registers links, definitions and hovers for .cast.php files", () => {
   const { providers } = project({});
@@ -382,4 +425,36 @@ test("EmbeddedDiagnostics.refresh publishes nothing (and never throws) when the 
   await embedded.refresh(document("/p/" + VIEW, src));
 
   assert.deepEqual(vscode.collections["cast-embedded"].get("/p/" + VIEW), []);
+});
+
+test("the extension's own Hovers/Definitions/Completions/Links/diagnostics/Fixes go quiet once the LSP reports Running", async () => {
+  const { providers, extension, fireLspState } = projectWithFakeLanguageClient({});
+  await fireLspState("Running");
+
+  const doc = document("/p/" + VIEW, '<Card title="x" />');
+  const somePosition = new Position(0, 3);
+
+  assert.equal(providers.hover.provideHover(doc, somePosition), undefined);
+  assert.equal(providers.componentHover.provideHover(doc, somePosition), undefined);
+  assert.equal(providers.definition.provideDefinition(doc, somePosition), undefined);
+  assert.equal(providers.propDefinition.provideDefinition(doc, somePosition), undefined);
+  assert.deepEqual(providers.completion.provideCompletionItems(doc, somePosition), undefined);
+  assert.deepEqual(providers.links.provideDocumentLinks(doc), undefined);
+  assert.deepEqual(providers.codeActions.provideCodeActions(doc, null, { diagnostics: [] }), []);
+
+  let out;
+  extension.publishDiagnostics(doc, { set: (uri, list) => (out = list) });
+  assert.deepEqual(out, [], "diagnostics are cleared, not computed, once the LSP owns them");
+});
+
+test("the extension's own engine resumes once the LSP reports Stopped after being Running", async () => {
+  const { providers, fireLspState } = projectWithFakeLanguageClient({});
+  await fireLspState("Running");
+  await fireLspState("Stopped");
+
+  const doc = document("/p/" + VIEW, '<Card title="x" />');
+  const somePosition = new Position(0, 3);
+
+  assert.notEqual(providers.hover.provideHover(doc, somePosition), undefined);
+  assert.notEqual(providers.links.provideDocumentLinks(doc), undefined);
 });

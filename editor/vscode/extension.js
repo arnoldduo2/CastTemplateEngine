@@ -33,6 +33,17 @@ const SELECTOR = { scheme: "file", pattern: "**/*.cast.php" };
 /** The running cast-language-server client, if one was started. Used by deactivate() to stop it. */
 let client;
 
+/** True once the LSP client has reported State.Running (see startLanguageClient's onDidChangeState wiring) - the
+ * LSP is preferred over this extension's own hand-rolled engine whenever it is confirmed running, and this
+ * extension's engine resumes automatically if the LSP later reports Stopped (e.g. the server crashed or was
+ * disabled). See docs/superpowers/specs/2026-10-17-cast-lsp-precedence-design.md. */
+let lspReady = false;
+
+/** Test seam for lspReady (a `let` binding can't be exported live via module.exports). */
+function isLspReady() {
+  return lspReady;
+}
+
 /** The folders to search for a document: from the settings, and from config/view.php when it names a components folder. */
 function locations(document) {
   const folder = vscode.workspace.getWorkspaceFolder(document.uri);
@@ -89,6 +100,7 @@ const KIND_TITLE = { component: "Component", "legacy-component": "Component (leg
 
 class Links {
   provideDocumentLinks(document) {
+    if (lspReady) return undefined;
     return references(document)
       .filter((r) => r.file)
       .map((r) => {
@@ -101,6 +113,7 @@ class Links {
 
 class Definitions {
   provideDefinition(document, position) {
+    if (lspReady) return undefined;
     const hit = references(document).find((r) => r.file && r.range.contains(position));
     return hit ? new vscode.Location(vscode.Uri.file(hit.file), new vscode.Position(0, 0)) : undefined;
   }
@@ -124,6 +137,7 @@ const FUNCTION_DIRECTIVE_NOTES = {
 
 class Hovers {
   provideHover(document, position) {
+    if (lspReady) return undefined;
     const wordRange = document.getWordRangeAtPosition(position, /[@A-Za-z0-9_.]+/);
     if (wordRange) {
       const word = document.getText(wordRange);
@@ -603,6 +617,7 @@ function componentAt(document, position) {
 
 class Completions {
   provideCompletionItems(document, position) {
+    if (lspReady) return undefined;
     const text = document.getText();
     const offset = document.offsetAt(position);
     const context = contextAt(text, offset);
@@ -687,6 +702,7 @@ class Completions {
 
 class ComponentHovers {
   provideHover(document, position) {
+    if (lspReady) return undefined;
     const hit = componentAt(document, position);
     if (!hit || !hit.found) return undefined;
     const range = new vscode.Range(
@@ -701,6 +717,7 @@ class ComponentHovers {
 /** Ctrl+click on a prop name: the line in the component file that documents or defaults it. */
 class PropDefinitions {
   provideDefinition(document, position) {
+    if (lspReady) return undefined;
     const hit = componentAt(document, position);
     if (!hit || hit.kind !== "attribute" || !hit.found || !hit.prop) return undefined;
     let source;
@@ -725,6 +742,10 @@ const SEVERITY = { hint: 3, warning: 1 };
 /** Problems in component tags, shown as hints (the default) or warnings; `cast.diagnostics: off` turns them off. */
 function publishDiagnostics(document, collection) {
   if (!/\.cast\.php$/.test(document.uri.fsPath)) return;
+  if (lspReady) {
+    collection.set(document.uri, []);
+    return;
+  }
   const level = vscode.workspace.getConfiguration("cast", document.uri).get("diagnostics", "hint");
   if (level === "off" || !(level in SEVERITY)) {
     collection.set(document.uri, []);
@@ -746,6 +767,7 @@ function publishDiagnostics(document, collection) {
 
 class Fixes {
   provideCodeActions(document, range, context) {
+    if (lspReady) return [];
     const actions = [];
     for (const d of context.diagnostics) {
       const p = d.cast;
@@ -940,9 +962,9 @@ function startLanguageClient(context) {
   const config = vscode.workspace.getConfiguration("cast");
   if (config.get("languageServer.enable", true) === false) return;
 
-  let LanguageClient;
+  let LanguageClient, State;
   try {
-    ({ LanguageClient } = require("vscode-languageclient/node"));
+    ({ LanguageClient, State } = require("vscode-languageclient/node"));
   } catch {
     showOnce(
       context,
@@ -977,6 +999,12 @@ function startLanguageClient(context) {
 
   client = new LanguageClient("castLanguageServer", "Cast Language Server", serverOptions, clientOptions);
   context.subscriptions.push({ dispose: () => client && client.stop() });
+  // The LSP is only preferred once it has actually completed its initialize handshake (State.Running) - not
+  // merely because a client object was constructed - and this extension's own engine resumes automatically if
+  // the LSP later reports Stopped (crashed, or cast.languageServer.enable turned off and the window reloaded).
+  client.onDidChangeState((e) => {
+    lspReady = e.newState === State.Running;
+  });
   client.start();
 }
 
@@ -1068,4 +1096,4 @@ function deactivate() {
   return client ? client.stop() : undefined;
 }
 
-module.exports = { activate, deactivate, references, locations, publishDiagnostics, spell, indentEdits, autoIndent, Formatter, EmbeddedDiagnostics, startLanguageClient, resolveServerCommand };
+module.exports = { activate, deactivate, references, locations, publishDiagnostics, spell, indentEdits, autoIndent, Formatter, EmbeddedDiagnostics, startLanguageClient, resolveServerCommand, isLspReady };
