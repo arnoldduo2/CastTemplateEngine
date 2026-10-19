@@ -6,16 +6,21 @@ import {
   TextEdit
 } from 'vscode-languageserver';
 import { CastDocument } from '../parser/ast.js';
+import { CastDiagnostic } from '../types.js';
 
 export class CodeActionsManager {
-  public getCodeActions(doc: CastDocument, params: CodeActionParams): CodeAction[] {
+  /** `diagnostics` is the full computed set for this document (DiagnosticsManager.getFastDiagnostics's result,
+   * merged with any PHP diagnostics) - not `doc.diagnostics`, which is only CastParser's own structural subset
+   * and never carries a missing-prop/unknown-prop/invalid-value fix. */
+  public getCodeActions(doc: CastDocument, params: CodeActionParams, diagnostics: CastDiagnostic[]): CodeAction[] {
     const actions: CodeAction[] = [];
 
-    for (const diag of doc.diagnostics) {
-      if (diag.fix && this.rangesOverlap(diag.range, params.range)) {
+    for (const diag of diagnostics) {
+      if (!diag.fix || !this.rangesOverlap(diag.range, params.range)) continue;
+      for (const fix of diag.fix) {
         const textEdit: TextEdit = {
-          range: diag.fix.range,
-          newText: diag.fix.newText
+          range: fix.range,
+          newText: fix.newText
         };
 
         const workspaceEdit: WorkspaceEdit = {
@@ -25,7 +30,7 @@ export class CodeActionsManager {
         };
 
         actions.push({
-          title: diag.fix.title,
+          title: fix.title,
           kind: CodeActionKind.QuickFix,
           diagnostics: [{
             range: diag.range,

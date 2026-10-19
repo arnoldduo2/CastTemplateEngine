@@ -98,7 +98,7 @@ async function validateDocument(document) {
     const uri = document.uri;
     const doc = parser.parse(uri, document.getText(), document.version);
     parsedDocs.set(uri, doc);
-    const diagnostics = diagnosticsManager.getFastDiagnostics(doc);
+    const diagnostics = diagnosticsManager.getFastDiagnostics(doc, settings);
     if (phpRouter) {
         try {
             diagnostics.push(...await phpRouter.getDiagnostics(doc));
@@ -202,7 +202,8 @@ connection.onCodeAction(params => {
     const doc = parsedDocs.get(params.textDocument.uri);
     if (!doc)
         return [];
-    return codeActionsManager.getCodeActions(doc, params);
+    const diagnostics = diagnosticsManager.getFastDiagnostics(doc, settings);
+    return codeActionsManager.getCodeActions(doc, params, diagnostics);
 });
 // Listen on the document connection and stdio
 documents.listen(connection);

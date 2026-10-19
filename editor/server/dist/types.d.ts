@@ -74,16 +74,17 @@ export interface CastSyntaxSpec {
     };
     allDirectiveWords: string[];
 }
+export interface CastDiagnosticFix {
+    title: string;
+    newText: string;
+    range: Range;
+}
 export interface CastDiagnostic {
     range: Range;
     message: string;
     severity: DiagnosticSeverity;
     code?: string;
     source?: string;
-    fix?: {
-        title: string;
-        newText: string;
-        range: Range;
-    };
+    fix?: CastDiagnosticFix[];
 }
 //# sourceMappingURL=types.d.ts.map

@@ -3,13 +3,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CodeActionsManager = void 0;
 const vscode_languageserver_1 = require("vscode-languageserver");
 class CodeActionsManager {
-    getCodeActions(doc, params) {
+    /** `diagnostics` is the full computed set for this document (DiagnosticsManager.getFastDiagnostics's result,
+     * merged with any PHP diagnostics) - not `doc.diagnostics`, which is only CastParser's own structural subset
+     * and never carries a missing-prop/unknown-prop/invalid-value fix. */
+    getCodeActions(doc, params, diagnostics) {
         const actions = [];
-        for (const diag of doc.diagnostics) {
-            if (diag.fix && this.rangesOverlap(diag.range, params.range)) {
+        for (const diag of diagnostics) {
+            if (!diag.fix || !this.rangesOverlap(diag.range, params.range))
+                continue;
+            for (const fix of diag.fix) {
                 const textEdit = {
-                    range: diag.fix.range,
-                    newText: diag.fix.newText
+                    range: fix.range,
+                    newText: fix.newText
                 };
                 const workspaceEdit = {
                     changes: {
@@ -17,7 +22,7 @@ class CodeActionsManager {
                     }
                 };
                 actions.push({
-                    title: diag.fix.title,
+                    title: fix.title,
                     kind: vscode_languageserver_1.CodeActionKind.QuickFix,
                     diagnostics: [{
                             range: diag.range,

@@ -310,6 +310,23 @@ class CastParser {
                 const value = isExpression ? exprValue : (doubleQuoted !== undefined ? doubleQuoted : singleQuoted);
                 const nameStart = attrStart;
                 const nameEnd = nameStart + name.length;
+                // The value's own range (excluding the quotes/braces) - previously never set for this branch (only the
+                // spread-attribute branch above set it), so a diagnostic needing to flag or replace just the value (not
+                // the whole name="value" span) had nothing to anchor to.
+                let valueRange;
+                if (isExpression) {
+                    const open = full.indexOf('{');
+                    if (open !== -1)
+                        valueRange = this.createRange(attrStart + open + 1, attrStart + open + 1 + exprValue.length);
+                }
+                else if (doubleQuoted !== undefined) {
+                    const open = full.indexOf('"');
+                    valueRange = this.createRange(attrStart + open + 1, attrStart + open + 1 + doubleQuoted.length);
+                }
+                else if (singleQuoted !== undefined) {
+                    const open = full.indexOf("'");
+                    valueRange = this.createRange(attrStart + open + 1, attrStart + open + 1 + singleQuoted.length);
+                }
                 out.push({
                     range: this.createRange(attrStart, attrEnd),
                     name,
@@ -317,7 +334,8 @@ class CastParser {
                     isExpression,
                     isSpread: false,
                     isBoolean,
-                    nameRange: this.createRange(nameStart, nameEnd)
+                    nameRange: this.createRange(nameStart, nameEnd),
+                    valueRange
                 });
             }
         }
@@ -366,11 +384,11 @@ class CastParser {
                 range: unclosed.range,
                 message: `@${unclosed.name} is never closed (missing @end${unclosed.name})`,
                 severity: vscode_languageserver_1.DiagnosticSeverity.Error,
-                fix: {
-                    title: `Insert @end${unclosed.name}`,
-                    newText: `\n@end${unclosed.name}\n`,
-                    range: this.createRange(this.text.length, this.text.length)
-                }
+                fix: [{
+                        title: `Insert @end${unclosed.name}`,
+                        newText: `\n@end${unclosed.name}\n`,
+                        range: this.createRange(this.text.length, this.text.length)
+                    }]
             });
         }
     }
@@ -412,11 +430,11 @@ class CastParser {
                 range: unclosed.range,
                 message: `<${unclosed.name}> is never closed. Expected </${unclosed.name}>`,
                 severity: vscode_languageserver_1.DiagnosticSeverity.Error,
-                fix: {
-                    title: `Close with </${unclosed.name}>`,
-                    newText: `</${unclosed.name}>`,
-                    range: this.createRange(this.text.length, this.text.length)
-                }
+                fix: [{
+                        title: `Close with </${unclosed.name}>`,
+                        newText: `</${unclosed.name}>`,
+                        range: this.createRange(this.text.length, this.text.length)
+                    }]
             });
         }
     }
