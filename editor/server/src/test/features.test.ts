@@ -87,4 +87,36 @@ describe('Language Server Features', () => {
     assert.ok(result.includes('  let a = 1;'), 'original interior indentation inside <script> is preserved verbatim');
     assert.ok(result.includes('      if (a) { a++ }'), 'original interior indentation inside <script> is preserved verbatim');
   });
+
+  test('hover on a builtin like handleEvent returns the shared markdown', () => {
+    const doc = parser.parse('file:///view.cast.php', '@script(handleEvent("click", ".btn", () => {}))');
+    const hover = hoverProvider.getHover(doc, positionOfWord(doc.text, 'handleEvent'));
+    assert.ok(hover, 'Should return hover for handleEvent');
+    const md = typeof hover!.contents === 'object' && 'value' in hover!.contents ? hover!.contents.value : '';
+    assert.match(md, /Registers a delegated event listener/);
+  });
+
+  test('hover on @{ immediately followed by { explains the echo hole', () => {
+    const doc = parser.parse('file:///view.cast.php', '<p>@{ $x }</p>');
+    const hover = hoverProvider.getHover(doc, { line: 0, character: 4 });
+    assert.ok(hover, 'Should return hover for the echo hole');
+    const md = typeof hover!.contents === 'object' && 'value' in hover!.contents ? hover!.contents.value : '';
+    assert.match(md, /echo hole/);
+  });
+
+  test('hover on a fluent .map() in a chain explains the chain, not a generic directive', () => {
+    const doc = parser.parse('file:///view.cast.php', '<p>@$items.filter(($i) => $i.active).map(($i) => $i.name)</p>');
+    const hover = hoverProvider.getHover(doc, positionOfWord(doc.text, 'map'));
+    assert.ok(hover, 'Should return hover for the chained .map()');
+    const md = typeof hover!.contents === 'object' && 'value' in hover!.contents ? hover!.contents.value : '';
+    assert.match(md, /fluent chain/);
+  });
 });
+
+/** The {line, character} of the first occurrence of `word` in `text` - test-only convenience. */
+function positionOfWord(text: string, word: string) {
+  const offset = text.indexOf(word);
+  const prefix = text.slice(0, offset);
+  const lines = prefix.split('\n');
+  return { line: lines.length - 1, character: lines[lines.length - 1].length };
+}

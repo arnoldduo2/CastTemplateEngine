@@ -2,7 +2,33 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HoverProvider = void 0;
 const vscode_languageserver_1 = require("vscode-languageserver");
+const cast_language_core_1 = require("cast-language-core");
 const syntaxSpec_js_1 = require("../syntaxSpec.js");
+const WORD_CHAR = /[@A-Za-z0-9_.]/;
+function offsetAt(text, position) {
+    let lineStart = 0;
+    for (let line = 0; line < position.line; line += 1) {
+        const newline = text.indexOf('\n', lineStart);
+        if (newline === -1)
+            return text.length;
+        lineStart = newline + 1;
+    }
+    return Math.min(lineStart + position.character, text.length);
+}
+/** The `/[@A-Za-z0-9_.]+/`-bounded word touching `offset`, matching VS Code's own getWordRangeAtPosition pattern
+ * for BUILTIN_HOVERS lookups (so "Cast.on"/"handleEvent"/"@script" all resolve the same way as the extension). */
+function wordAt(text, offset) {
+    let start = offset;
+    while (start > 0 && WORD_CHAR.test(text[start - 1]))
+        start--;
+    let end = offset;
+    while (end < text.length && WORD_CHAR.test(text[end]))
+        end++;
+    return start < end ? text.slice(start, end) : null;
+}
+function markdownHover(value) {
+    return { contents: { kind: vscode_languageserver_1.MarkupKind.Markdown, value } };
+}
 class HoverProvider {
     projectIndex;
     syntax = (0, syntaxSpec_js_1.getCastSyntaxSpec)();
@@ -10,6 +36,20 @@ class HoverProvider {
         this.projectIndex = projectIndex;
     }
     getHover(doc, position) {
+        const offset = offsetAt(doc.text, position);
+        // 0. BUILTIN_HOVERS / echo hole / fluent chain - not Cast directives, but still worth explaining, and shared
+        // with the extension's own fallback engine so the two never disagree on the text.
+        const word = wordAt(doc.text, offset);
+        if (word && cast_language_core_1.BUILTIN_HOVERS[word]) {
+            return markdownHover(cast_language_core_1.BUILTIN_HOVERS[word]);
+        }
+        if ((doc.text[offset] === '{' && doc.text[offset - 1] === '@') || (doc.text[offset] === '@' && doc.text[offset + 1] === '{')) {
+            return markdownHover(cast_language_core_1.ECHO_HOLE_HOVER);
+        }
+        const chain = (0, cast_language_core_1.scanChainCalls)(doc.text).find((c) => offset >= c.start && offset <= c.end);
+        if (chain) {
+            return markdownHover(cast_language_core_1.CHAIN_HOVER[chain.method]);
+        }
         // 1. Hover on Component tag
         for (const comp of doc.components) {
             if (this.positionInRange(position, comp.nameRange)) {
