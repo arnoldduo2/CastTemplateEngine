@@ -100,7 +100,9 @@ final class PhpactorInstaller
             return false;
         }
 
-        if (PHP_OS_FAMILY !== 'Windows') {
+        if (PHP_OS_FAMILY === 'Windows') {
+            self::patchForWindows($destination);
+        } else {
             @chmod($destination, 0755);
         }
 
@@ -165,4 +167,60 @@ final class PhpactorInstaller
 
         return @file_put_contents($destination, $contents) !== false;
     }
+
+    public static function patchForWindows(string $destination): bool
+    {
+        $php = (new RequirementsChecker())->resolvePhpBinary() ?? 'php';
+        $script = <<<'PHP'
+$dest = $argv[1];
+$extractDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phpactor_extract_' . uniqid();
+@mkdir($extractDir, 0777, true);
+try {
+    $p = new Phar($dest);
+    $p->extractTo($extractDir, null, true);
+    $binPath = $extractDir . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'phpactor';
+    if (is_file($binPath)) {
+        $c = file_get_contents($binPath);
+        $c = str_replace(
+            "['mbstring', 'posix', 'tokenizer']",
+            "DIRECTORY_SEPARATOR === '\\\\' ? ['mbstring', 'tokenizer'] : ['mbstring', 'posix', 'tokenizer']",
+            $c
+        );
+        file_put_contents($binPath, $c);
+    }
+    unset($p);
+    @unlink($dest);
+    $newPhar = new Phar($dest);
+    $newPhar->buildFromDirectory($extractDir);
+    $stub = <<<'STUB'
+#!/usr/bin/env php
+<?php
+Phar::mapPhar('phpactor.phar');
+require 'phar://phpactor.phar/bin/phpactor';
+__HALT_COMPILER(); ?>
+STUB;
+    $newPhar->setStub($stub);
+    unset($newPhar);
+    return 0;
+} catch (Throwable $e) {
+    fwrite(STDERR, $e->getMessage() . "\n");
+    return 1;
+} finally {
+    if (is_dir($extractDir)) {
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($extractDir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($it as $item) {
+            $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());
+        }
+        @rmdir($extractDir);
+    }
 }
+PHP;
+
+        $res = ProcessRunner::run([$php, '-d', 'phar.readonly=0', '-r', $script, $destination]);
+        return $res->isSuccess();
+    }
+}
+

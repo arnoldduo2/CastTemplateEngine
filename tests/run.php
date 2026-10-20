@@ -614,9 +614,9 @@ test('@children prints the component body, or a literal fallback when there is n
     same('<div>empty content</div>', page('<ChildrenFallback />'));
 });
 
-test('@includes compiles to a call to __includes(), the same framework-helper pattern as @route/@cast/@modules', function () {
+test('@includes compiles to a void call to __includes(), preventing double echo since partial() already echoes', function () {
     same(
-        "<?= __includes('layouts.header', \$data) ?>;",
+        "<?php __includes('layouts.header', \$data); ?>",
         (new \CastTemplateEngine\Directives())->compile("@includes('layouts.header', \$data);")
     );
 });

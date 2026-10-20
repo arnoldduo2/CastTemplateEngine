@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Shared hover markdown for things that aren't Cast directives but still show up in a .cast.php file: built-in
  * JS runtime helpers, the `@{ }` echo hole, and fluent `.filter()/.map()` chain segments. Ported verbatim from
  * editor/vscode/extension.js so the LSP and the extension's own fallback engine never disagree about this text.
@@ -18,7 +18,9 @@ export const BUILTIN_HOVERS: Record<string, string> = {
   "@map": "**@map($collection, fn($item, $i) => ...)**\n\nRenders markup for every item of `$collection` and echoes the result. Backed by `Collection::map()`.\n\n- `$collection`: an array, `stdClass` or `Traversable`\n- callback: `fn($item, $index, $key) => string`\n\n```php\n@map($items, ($item, $i) => return(<Card key={$i}>@{ $item->name }</Card>))\n```",
   "@filter": "**@filter($collection, fn($item) => bool[, fn($item, $i) => ...])**\n\nTwo forms, backed by `Collection::filter()`:\n\n- **Render form** (3 args): filters `$collection`, then renders and echoes each remaining item with the 3rd callback.\n- **Standalone form** (2 args): reassigns `$collection` in place to the filtered array/object — nothing is echoed.\n\n```php\n@filter($items, ($item) => $item->qty > 0)\n```",
   return: "**return(...)** *(inside an expression)*\n\nCompiles the markup inside the parentheses and returns it as a string, so a chunk of HTML/components can be produced from inside a callback or `@{ }` expression (e.g. a `@map`/`@filter` callback). Implemented as an immediately-invoked closure that buffers output with `ob_start()`/`ob_get_clean()` and captures the surrounding scope's variables.",
-  "@render": "**@render(...)** *(inside an expression)*\n\nAlias for `return(...)` inside an expression: compiles the markup inside the parentheses and returns it as a string from the current callback/expression."
+  "@render": "**@render(...)** *(inside an expression)*\n\nAlias for `return(...)` inside an expression: compiles the markup inside the parentheses and returns it as a string from the current callback/expression.",
+  "@includes": "**@includes(string $name, array $data = [], bool $withAuth = false): mixed**\n\nInclude a partial or layout (echoes it). Backed by `__includes()`.\n\n- `$name`: View or partial path (e.g. `'layouts.header'`)\n- `$data`: Array of variables passed to the partial (defaults to `[]`)\n- `$withAuth`: If true, only renders when a user is authenticated (defaults to `false`)\n\n```php\n@includes('layouts.header', $data)\n```",
+  "@children": "**@children**\n\nPrints the component's or layout's captured body content (`$children`), or a fallback when there is none."
 };
 
 export const ECHO_HOLE_HOVER =

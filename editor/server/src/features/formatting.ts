@@ -15,9 +15,12 @@ export class FormattingProvider {
       return [];
     }
 
+    const lastLine = Math.max(0, lines.length - 1);
+    const lastCol = lines[lastLine]?.length ?? 0;
+
     return [
       TextEdit.replace(
-        Range.create(0, 0, lines.length, 0),
+        Range.create(0, 0, lastLine, lastCol),
         newText
       )
     ];

@@ -242,6 +242,14 @@ final class Directives
         $this->pos += strlen($matched);
         $fn = self::FUNCTION_DIRECTIVES[$word];
         $args = preg_match('/\G\s*\(/', $this->src, $_, 0, $this->pos) ? $this->parenthesised($word, $line) : '';
+        if ($word === 'includes') {
+            if (preg_match('/\G[ \t]*;/', $this->src, $sm, 0, $this->pos)) {
+                $this->pos += strlen($sm[0]);
+            }
+            $this->lastEnd = $this->pos;
+            $newline = substr($this->src, $this->pos, 2) === "\r\n" ? 2 : (($this->src[$this->pos] ?? '') === "\n" ? 1 : 0);
+            return $newline ? "<?php $fn($args); ?>\n" : "<?php $fn($args); ?>";
+        }
         $this->lastEnd = $this->pos;
         return $this->echo("$fn($args)", $line);
     }
@@ -368,7 +376,7 @@ final class Directives
                 // $children (CastTemplate::render()) is the content captured between a component's opening and
                 // closing tags, defaulting to '' when the tag was self-closing or had nothing between them -
                 // @children prints it, or a literal fallback when there was nothing to print.
-                return "<?= \$children !== '' ? \$children : 'empty content' ?>";
+                return "<?= (\$children ?? (\$slot ?? (\$content ?? ''))) !== '' ? (\$children ?? (\$slot ?? (\$content ?? ''))) : 'empty content' ?>";
             default:                                                                // break, continue
                 $this->expectInside(['for', 'foreach', 'forelse', 'while', 'switch'], $word, $line);
                 return $arg === null || $arg === '' ? "<?php $word; ?>" : "<?php if ($arg) $word; ?>";

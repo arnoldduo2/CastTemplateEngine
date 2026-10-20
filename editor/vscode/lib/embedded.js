@@ -112,7 +112,7 @@ function findBraceExpressions(src) {
  * `@css`/`@script`/`@js` are handled separately by findEmbeddedBlocks() (their body is CSS/JS, not PHP); directives
  * that take no parenthesized argument (`@else`, `@endphp`, `@scripts`, `@styles`, ...) are excluded.
  */
-const DIRECTIVE_ARG_WORD = "(for|foreach|forelse|while|if|elseif|unless|isset|switch|case|php|map|filter|break|continue|htchars|route|cast|csrf|alerts|modules)";
+const DIRECTIVE_ARG_WORD = "(for|foreach|forelse|while|if|elseif|unless|isset|switch|case|php|map|filter|break|continue|htchars|route|cast|csrf|alerts|modules|includes)";
 const DIRECTIVE_OPEN = new RegExp(`@${DIRECTIVE_ARG_WORD}\\s*\\(`, "g");
 const MARKUP_RENDER = /\breturn\s*\(|@render\s*\(/;
 
@@ -130,6 +130,7 @@ const FUNCTION_DIRECTIVES = {
   csrf: "__csrf",
   alerts: "__getAlerts",
   modules: "__modules",
+  includes: "__includes",
 };
 
 /**

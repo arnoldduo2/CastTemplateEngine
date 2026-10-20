@@ -91,7 +91,8 @@ function getCastSyntaxSpec() {
             cast: '__cast',
             csrf: '__csrf',
             alerts: '__getAlerts',
-            modules: '__modules'
+            modules: '__modules',
+            includes: '__includes'
         },
         components: {
             tagPattern: '^[A-Z][A-Za-z0-9_]*(?:\\.[A-Z][A-Za-z0-9_]*)*$',
@@ -102,7 +103,7 @@ function getCastSyntaxSpec() {
             'endunless', 'endisset', 'endwhile', 'endphp', 'endfor', 'endif',
             'switch', 'unless', 'isset', 'default', 'empty', 'else', 'case',
             'for', 'while', 'if', 'php', 'break', 'continue', 'map', 'filter',
-            'scripts', 'styles', 'script', 'js', 'css'
+            'scripts', 'styles', 'script', 'js', 'css', 'includes', 'children'
         ]
     };
     return cachedSpec;

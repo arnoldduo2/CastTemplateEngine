@@ -251,6 +251,13 @@ class HoverProvider {
                 }
             };
         }
+        if (cast_language_core_1.BUILTIN_HOVERS[`@${name}`]) {
+            return markdownHover(cast_language_core_1.BUILTIN_HOVERS[`@${name}`]);
+        }
+        const fn = this.syntax.functionDirectives[name];
+        if (fn) {
+            return markdownHover(`**Cast Directive: \`@${name}\`** → \`${fn}()\`\n\nFramework helper directive compiling to an echoed call to \`${fn}()\`.`);
+        }
         return null;
     }
     positionInRange(pos, range) {

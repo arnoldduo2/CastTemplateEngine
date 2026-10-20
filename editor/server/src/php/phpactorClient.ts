@@ -1,5 +1,6 @@
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import { StreamMessageReader, StreamMessageWriter, createMessageConnection, MessageConnection } from 'vscode-jsonrpc/node.js';
+import { URI } from 'vscode-uri';
 import { VirtualPhpDocument } from 'cast-language-core';
 import { PhpDiagnosticClient, UpstreamDiagnostic } from './phpRouter.js';
 
@@ -20,6 +21,12 @@ export class PhpactorClient implements PhpDiagnosticClient {
   public async start(workspaceFolders: string[]): Promise<void> {
     if (this.connection) return;
     this.process = spawn(this.command.command, this.command.args, { stdio: 'pipe', windowsHide: true });
+
+    let stderrOutput = '';
+    this.process.stderr.on('data', (chunk) => {
+      stderrOutput += chunk.toString();
+    });
+
     this.process.once('error', () => this.dispose());
     this.process.once('exit', () => this.dispose());
     const connection = createMessageConnection(new StreamMessageReader(this.process.stdout), new StreamMessageWriter(this.process.stdin));
@@ -28,13 +35,26 @@ export class PhpactorClient implements PhpDiagnosticClient {
     });
     connection.listen();
     this.connection = connection;
-    await connection.sendRequest('initialize', {
-      processId: process.pid,
-      rootUri: workspaceFolders[0] ? `file://${workspaceFolders[0].replace(/\\/g, '/')}` : null,
-      workspaceFolders: workspaceFolders.map((folder) => ({ uri: `file://${folder.replace(/\\/g, '/')}`, name: folder.split(/[\\/]/).pop() ?? folder })),
-      capabilities: { textDocument: { publishDiagnostics: { relatedInformation: true } } },
-    });
-    await connection.sendNotification('initialized', {});
+
+    const rootUri = workspaceFolders[0] ? URI.file(workspaceFolders[0]).toString() : null;
+    const folders = workspaceFolders.map((folder) => ({
+      uri: URI.file(folder).toString(),
+      name: folder.split(/[\\/]/).pop() ?? folder
+    }));
+
+    try {
+      await connection.sendRequest('initialize', {
+        processId: process.pid,
+        rootUri,
+        workspaceFolders: folders,
+        capabilities: { textDocument: { publishDiagnostics: { relatedInformation: true } } },
+      });
+      await connection.sendNotification('initialized', {});
+    } catch (error) {
+      this.dispose();
+      const detail = stderrOutput.trim() ? ` (${stderrOutput.trim()})` : '';
+      throw new Error(`${error instanceof Error ? error.message : 'unknown error'}${detail}`);
+    }
   }
 
   public async synchronize(virtual: VirtualPhpDocument, version: number = 1): Promise<UpstreamDiagnostic[]> {

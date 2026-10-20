@@ -237,6 +237,15 @@ export class HoverProvider {
       };
     }
 
+    if (BUILTIN_HOVERS[`@${name}`]) {
+      return markdownHover(BUILTIN_HOVERS[`@${name}`]);
+    }
+
+    const fn = this.syntax.functionDirectives[name];
+    if (fn) {
+      return markdownHover(`**Cast Directive: \`@${name}\`** → \`${fn}()\`\n\nFramework helper directive compiling to an echoed call to \`${fn}()\`.`);
+    }
+
     return null;
   }
 

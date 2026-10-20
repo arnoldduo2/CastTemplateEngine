@@ -10,8 +10,10 @@ class FormattingProvider {
         if (newText === doc.text) {
             return [];
         }
+        const lastLine = Math.max(0, lines.length - 1);
+        const lastCol = lines[lastLine]?.length ?? 0;
         return [
-            vscode_languageserver_1.TextEdit.replace(vscode_languageserver_1.Range.create(0, 0, lines.length, 0), newText)
+            vscode_languageserver_1.TextEdit.replace(vscode_languageserver_1.Range.create(0, 0, lastLine, lastCol), newText)
         ];
     }
 }

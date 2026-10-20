@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 /**
  * Compatibility facade over cast-language-core's indentation module: the extension's auto-indent and the
  * `indent.test.js` suite both call these names, but the structural scanning itself (and the multiline @php(...)

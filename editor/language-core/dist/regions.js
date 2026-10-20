@@ -7,7 +7,7 @@ const BLOCK_ENDS = new Set(['endif', 'endunless', 'endisset', 'endfor', 'endfore
 const INTERMEDIATES = new Set(['elseif', 'else', 'empty', 'case', 'default']);
 const PHP_ARGUMENT_DIRECTIVES = new Set([
     'if', 'unless', 'isset', 'for', 'foreach', 'forelse', 'while', 'switch', 'case', 'elseif', 'php',
-    'break', 'continue', 'map', 'filter',
+    'break', 'continue', 'map', 'filter', 'htchars', 'route', 'cast', 'csrf', 'alerts', 'modules', 'includes',
 ]);
 /** @map/@filter's callback often ends in `=> return(<markup/>)` or `=> @render(<markup/>)` - markup, not PHP.
  * Treating it as a PHP region would feed invalid syntax to a PHP language service and can break diagnostics/hover

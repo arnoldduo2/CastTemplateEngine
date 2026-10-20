@@ -123,7 +123,7 @@ test("@ directives: if/elseif/else, foreach, forelse/empty, for, while, unless, 
 
 test("@php blocks keep their code; @php(...) is a statement; @@ and e-mail addresses are not directives", () => {
   const out = fmt(`<div>\n@php\n$x = 1;\n   keep();\n@endphp\n@php($n = 5)\n<p>me@if.com @@if</p>\n</div>`);
-  assert.equal(out, `<div>\n    @php\n$x = 1;\n   keep();\n    @endphp\n    @php($n = 5)\n    <p>me@if.com @@if</p>\n</div>`);
+  assert.equal(out, `<div>\n    @php\n        $x = 1;\n        keep();\n    @endphp\n    @php($n = 5)\n    <p>me@if.com @@if</p>\n</div>`);
 });
 
 test("a multiline @php statement never waits for @endphp", () => {

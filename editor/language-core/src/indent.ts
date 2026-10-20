@@ -338,14 +338,13 @@ class Scanner {
           this.push("phpcall");
           this.mode = "php";
         } else {
-          // the code of a bare @php block is not ours to move
+          this.content(ctx);
           this.push("dir", "php");
           const end = /@endphp\b/.exec(text.slice(i + length));
-          if (end) this.popTo((e) => e.kind === "dir" && e.name === "php");
-          else {
-            this.mode = "raw";
-            this.rawKeep = false;
-            this.rawEnd = /@endphp\b/;
+          if (end) {
+            this.popTo((e) => e.kind === "dir" && e.name === "php");
+          } else {
+            this.mode = "php";
           }
         }
       } else {
@@ -353,6 +352,8 @@ class Scanner {
       }
     } else if (word === "endphp") {
       this.popTo((e) => e.kind === "dir" && e.name === "php");
+      if (ctx.depth === null) ctx.depth = this.depth();
+      ctx.leading = false;
     } else if (MIDDLE_DIRECTIVES[word]) {
       const target = MIDDLE_DIRECTIVES[word];
       const kinds = target === "if" ? ["if", "unless", "isset"] : [target];
@@ -388,6 +389,13 @@ class Scanner {
     const n = text.length;
     for (; i < n; i++) {
       const c = text[i];
+      if (c === "@" && text.startsWith("@endphp", i)) {
+        this.popTo((e) => e.kind === "dir" && e.name === "php");
+        if (ctx.depth === null) ctx.depth = this.depth();
+        ctx.leading = false;
+        this.mode = "html";
+        return i + 7;
+      }
       if (c === "?" && text[i + 1] === ">") {
         if (ctx.depth === null) ctx.depth = this.depth(); // a line that is only `?>` sits at the level of `<?php`
         this.mode = "html";

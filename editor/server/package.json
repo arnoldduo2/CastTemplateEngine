@@ -1,6 +1,6 @@
 {
   "name": "cast-language-server",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "Language Server Protocol (LSP) implementation for the Cast Template Engine (.cast.php)",
   "main": "dist/server.js",
   "types": "dist/server.d.ts",

@@ -2,6 +2,17 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 3.0.4
+
+- **@includes void compilation**: compiles @includes('name', \) as a void PHP statement <?php __includes(...); ?> rather than <?= __includes(...) ?>. Because __includes() / View::partial() already echoes the rendered partial directly to the output buffer, emitting an echo tag caused duplicate rendering of included templates (such as headers and footers). Consumes trailing semicolons cleanly.
+- **@children null-coalescing fallback**: compiles @children to null-coalescing expression <?= (\ ?? (\ ?? (\ ?? ''))) !== '' ? (\ ?? (\ ?? (\ ?? ''))) : 'empty content' ?>, preventing PHP 8.2+ Undefined variable \ notices when rendering components or layouts without explicit $children passed.
+- **Windows compatibility for Phpactor LSP backend**:
+  - PhpactorInstaller::patchForWindows() automatically unpacks downloaded phpactor.phar and removes hardcoded ext-posix requirement when running on Windows platforms, creating a clean portable PHAR executable.
+  - phpactorClient.ts uses RFC-compliant ile:/// URIs via scode-uri (replacing invalid 2-slash ile://D:/... strings) and buffers stderr output during initialization so boot errors are clearly visible rather than hidden by connection disposal.
+- **@php ... @endphp indentation**: updated indentation scanner in cast-language-core to switch into "php" mode rather than "raw" mode, correctly indenting statements inside @php blocks and re-aligning @endphp to the matching opening tag level without flattening or destroying indentation on save.
+- **Directive hover & spec parity**: registered @includes and @children with complete docblock signatures, parameter explanations, and function directive lookup in both cast-language-server and cast-language-core.
+- **Formatting bounds fix**: exact document range computation in cast-language-server's formatting provider, avoiding trailing range errors.
+
 ## 3.0.3
 
 - **LSP/extension precedence**: the VS Code extension now defers entirely to `cast-language-server` for
