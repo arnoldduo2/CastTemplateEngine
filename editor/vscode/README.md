@@ -12,8 +12,9 @@ Highlighting and navigation for the views of a [CastFramework](https://github.co
   - a module: `__modules('app.app', 'js')` opens `resources/js/app/app.module.js`.
 
   Hover shows the file and the props the component reads (`$title ??= ...`); for a name with no file it lists the paths it looked for.
+
 - **The engine's `@` syntax** (`@{ $x }`, `@foreach`, `@forelse`, `@if`, `@switch`, `@php` ... ) is coloured too, with the PHP inside its parentheses.
-- **Indentation**: *Format Document*, *Format Selection* and **Cast: Fix indentation** re-indent a view, and `cast.autoIndent` (on by default) keeps it right while you type (Enter, and lines that become `</div>`, `<?php endif ?>`, `@endif`, `@else`). It understands HTML and component tags (also with attributes over several lines), PHP's `if (...): ... endif` syntax, multi-line `<?php ?>` blocks and the `@` directives together, and changes only leading whitespace; `<script>`, `<style>`, `<pre>`, comments and heredocs are left alone. Choose it as the formatter for `.cast.php` if another PHP formatter asks (*Format Document With...*).
+- **Indentation**: _Format Document_, _Format Selection_ and **Cast: Fix indentation** re-indent a view, and `cast.autoIndent` (on by default) keeps it right while you type (Enter, and lines that become `</div>`, `<?php endif ?>`, `@endif`, `@else`). It understands HTML and component tags (also with attributes over several lines), PHP's `if (...): ... endif` syntax, multi-line `<?php ?>` blocks and the `@` directives together, and changes only leading whitespace; `<script>`, `<style>`, `<pre>`, comments and heredocs are left alone. Choose it as the formatter for `.cast.php` if another PHP formatter asks (_Format Document With..._).
 - **Snippets** (in PHP files): `aprops`, `apropsext`, `ccomp`, `ccomp1`, `cslot`, `cprop`, `cfor`, `cif`, `cpage`, `cinc`, `cmod`, and for the `@` syntax `aforeach`, `aforelse`, `aif`, `aifelse`, `afor`, `awhile`, `aswitch`, `aecho`; in JavaScript `cpagejs` (the `Cast.page({ mount, destroy })` lifecycle).
 
 ## Install
@@ -47,7 +48,7 @@ it; `--dry-run` prints what would happen without changing anything.
 
 The older, extension-only `php cast engine:editor install [--editor=<name>]` still works unchanged.
 
-A packaged `.vsix` (`npm run package`) can also be installed with *Extensions: Install from VSIX...*. A Marketplace release will follow.
+A packaged `.vsix` (`npm run package`) can also be installed with _Extensions: Install from VSIX..._. A Marketplace release will follow.
 
 ### What `engine:editor-install` does
 
@@ -71,16 +72,16 @@ A packaged `.vsix` (`npm run package`) can also be installed with *Extensions: I
 
 ## Settings
 
-| Setting | Default | |
-| --- | --- | --- |
-| `cast.componentsPath` | `resources/views/components` | Folder(s), relative to the workspace folder. `config/view.php` `'components' => 'ui'` is picked up automatically (relative to the views folder). |
-| `cast.viewsPath` | `resources/views` | Where `__includes()` / `views()` names are looked up. |
-| `cast.resourcesPath` | `resources` | Where `css/` and `js/` modules are. |
-| `cast.extension` | `.cast.php` | The extension of view and component files. |
-| `cast.autoIndent` | `true` | Keep the indentation right while typing in `.cast.php` files (after Enter; lines that become `</div>`, `<?php endif ?>`, `@endif`, `@else`). |
-| `cast.diagnostics`, `cast.propCase` | `hint`, `camel` | Problems in component tags; how prop names are written when completed. |
-| `cast.languageServer.enable` | `true` | Enable the `cast-language-server` client. |
-| `cast.languageServer.path` | `""` | Absolute path to `cast-language-server`; empty auto-detects it on PATH. |
+| Setting                             | Default                      |                                                                                                                                                  |
+| ----------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cast.componentsPath`               | `resources/views/components` | Folder(s), relative to the workspace folder. `config/view.php` `'components' => 'ui'` is picked up automatically (relative to the views folder). |
+| `cast.viewsPath`                    | `resources/views`            | Where `__includes()` / `views()` names are looked up.                                                                                            |
+| `cast.resourcesPath`                | `resources`                  | Where `css/` and `js/` modules are.                                                                                                              |
+| `cast.extension`                    | `.cast.php`                  | The extension of view and component files.                                                                                                       |
+| `cast.autoIndent`                   | `true`                       | Keep the indentation right while typing in `.cast.php` files (after Enter; lines that become `</div>`, `<?php endif ?>`, `@endif`, `@else`).     |
+| `cast.diagnostics`, `cast.propCase` | `hint`, `camel`              | Problems in component tags; how prop names are written when completed.                                                                           |
+| `cast.languageServer.enable`        | `true`                       | Enable the `cast-language-server` client.                                                                                                        |
+| `cast.languageServer.path`          | `""`                         | Absolute path to `cast-language-server`; empty auto-detects it on PATH.                                                                          |
 
 ## Language Server Protocol & Architecture
 
@@ -89,7 +90,7 @@ The extension launches it automatically once it's installed (`php cast engine:ed
 resolvable on PATH — see `cast.languageServer.enable`/`cast.languageServer.path` below to disable it or
 point at a specific binary.
 
-**Precedence (since v3.0.0):** when the LSP client confirms a successful `State.Running` handshake, this
+**Precedence (since v3.0.3):** when the LSP client confirms a successful `State.Running` handshake, this
 extension's own hover, Go to Definition, completion, Document Links (the Ctrl+click/hover features
 described above), and diagnostics-with-quick-fixes step aside and the LSP serves those instead — the two
 are never both active for the same capability at once. If the LSP isn't installed, fails to start, or

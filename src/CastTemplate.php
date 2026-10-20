@@ -19,7 +19,7 @@ namespace CastTemplateEngine;
  */
 final class CastTemplate
 {
-    public const VERSION = '3.0.0';
+    public const VERSION = '3.0.3';
 
     private const OPTIONS = ['viewsDir', 'cacheDir', 'checkModified', 'shared'];
 

@@ -1,7 +1,7 @@
 # Cast ecosystem fixes applied in erp-spa (2026-10-14 — 2026-10-15)
 
 Scope and ground rules (see the approved plan for full context): these fixes were made and certified against
-**erp-spa's own `vendor/` copies** of `anode/cast-template-engine` (1.6.0) and `anode/cast-framework` (3.0.0), plus the
+**erp-spa's own `vendor/` copies** of `anode/cast-template-engine` (1.6.0) and `anode/cast-framework` (3.0.3), plus the
 **two installed editor-extension copies** (`C:\Users\user\.vscode\extensions\anode.cast-framework-1.5.1` and
 `D:\.devTools\.antigravity-ide\extensions\anode.cast-framework-1.6.0`), and erp-spa's own app-level view files.
 **Nothing was pushed to the `CastFramework` / `CastTemplateEngine` git repos** (the real source-of-truth checkouts at
@@ -12,7 +12,7 @@ Beyond the 8 originally reported bugs, live verification surfaced three addition
 (Bugs 9, 10, 11 below) that directly explained symptoms the user reported ("css is not rendered", "live reload
 didn't notice any changes") even after the 8 planned fixes were applied — these were investigated and fixed with
 the user's explicit go-ahead mid-session, since they're genuine engine/framework bugs, not scope creep into
-content/design decisions (see Bug 12 for the one finding that *was* left alone for that reason).
+content/design decisions (see Bug 12 for the one finding that _was_ left alone for that reason).
 
 ---
 
@@ -22,17 +22,19 @@ content/design decisions (see Bug 12 for the one finding that *was* left alone f
 all; the literal text `$item['id']}` was echoed un-evaluated into the HTML output.
 
 **Root cause:** `vendor\anode\cast-template-engine\src\Compiler.php`, `htmlTag()`'s bare-value fallback branch (for
-unquoted HTML attribute values like `type=text`) accepted *any* run of non-whitespace characters after `=`,
+unquoted HTML attribute values like `type=text`) accepted _any_ run of non-whitespace characters after `=`,
 including an unbalanced stray `}`, and copied it verbatim into the output with no validation. The parser for
 custom **component** tags (`attributes()`) already validates this correctly and throws — only the plain-HTML-tag
 path was missing the check.
 
 **Fix applied:** `Compiler.php`, `htmlTag()`'s `else` branch — reject a bare value whose `{`/`}` count is unbalanced:
+
 ```php
 if (substr_count($v[0], '}') !== substr_count($v[0], '{')) {
     $this->fail("Attribute $attr is missing its opening { (found \"$v[0]\"). Write $attr={...}", $line);
 }
 ```
+
 Also fixed the actual trigger in erp-spa's own view: `src\resources\views\components\cards\main.cast.php:16`,
 `key=$item['id']}` → `key={$item['id']}` (a live-project file, not vendor code — no porting needed).
 
@@ -54,11 +56,12 @@ correctly named the real template file and line.
 **Root cause:** `TemplateError` (`src\TemplateError.php`) was a bare `extends \RuntimeException {}` with no
 constructor override, so PHP's native `getFile()`/`getLine()` always reported the physical `throw` site inside the
 engine. `CastTemplate::pointToSource()` exists to correct exactly this, but only recognizes exceptions whose
-`getFile()` is a *compiled cache file* — a compile-time error is thrown before any cache file exists, so it returns
+`getFile()` is a _compiled cache file_ — a compile-time error is thrown before any cache file exists, so it returns
 early without fixing anything.
 
 **Fix applied:** gave `TemplateError` a constructor that sets the (protected, settable) `$file`/`$line` properties
 directly — confirmed via a standalone PHP test that this correctly overrides `getFile()`/`getLine()`:
+
 ```php
 public function __construct(string $message, ?string $file = null, ?int $line = null, int $code = 0, ?\Throwable $previous = null)
 {
@@ -67,6 +70,7 @@ public function __construct(string $message, ?string $file = null, ?int $line = 
     if ($line !== null) $this->line = $line;
 }
 ```
+
 Updated every throw site to pass the file/line it already computes: `Compiler.php` (`fail()`), `Directives.php`
 (`fail()`), and `Css.php`'s three direct `throw new TemplateError(...)` sites (unclosed `{`, empty hole,
 hole-not-a-value).
@@ -91,6 +95,7 @@ word list. More importantly, even once recognized, there was **no bracket-depth 
 body computed at depth 0.
 
 **Fix applied:**
+
 1. Added the 7 missing keywords to the directive regex.
 2. Added a dedicated `"block"` scanner mode, entered only when `@css(`/`@script(`/`@js(` doesn't close on the same
    line, with a new `scanBlock()` method that reuses the file's own `push`/`popTo` bracket-stack idiom (the same one
@@ -99,7 +104,7 @@ body computed at depth 0.
 3. **Found and fixed a related pre-existing bug this surfaced**, not previously covered by any of the 8 reports:
    when a multi-line `/* */` comment (or heredoc) ends, the scanner unconditionally resumed in `"html"` mode instead
    of whatever mode it was in before the comment started — losing all bracket tracking for the remainder of a PHP
-   `<?php ?>` block *or* a `@script()`/`@css()` body whenever a multi-line comment appeared inside one (confirmed
+   `<?php ?>` block _or_ a `@script()`/`@css()` body whenever a multi-line comment appeared inside one (confirmed
    with a standalone repro: a `/* comment */` inside a PHP `if (...) { ... }` left the closing `}` permanently
    mis-indented). Fixed by adding a `this.returnMode` property, set explicitly at every point that enters
    raw/comment/heredoc mode (real `<script>`/`<style>`/`<pre>`/`<textarea>` content and HTML comments still resume
@@ -107,6 +112,7 @@ body computed at depth 0.
    both resume points instead of a hardcoded `"html"`.
 
 **Verification performed:**
+
 - Ran `computeIndents()` directly against `main.cast.php`: `.list-group{` → depth 1, `width: 100%,` → depth 2,
   closing `}` → depth 1, `@css(`/`)` themselves → depth 0; `function clicked(card){` → depth 1 with its body at
   depth 2 and the JSDoc comment immediately above it correctly resuming `"block"` mode rather than losing tracking.
@@ -133,12 +139,13 @@ identifier inside `@script(...)` gave nothing useful (or, for a handful of exact
 blurb) — no type info, no real completion, no CSS/JS language service at all.
 
 **Root cause:** `editor\vscode\extension.js`'s `Hovers` class answered everything from a small hardcoded dictionary
-and a canned string for the literal `@{` delimiter — it never inspected or forwarded what was actually *inside* the
+and a canned string for the literal `@{` delimiter — it never inspected or forwarded what was actually _inside_ the
 braces. The TextMate grammar injections (`source.php`/`source.css`/`source.js` scopes) only affect syntax coloring;
 `.cast.php` tokenizes as plain `php` to VS Code, so intelephense only ever sees real `<?php ?>`/`<?= ?>` regions —
 `@{ }`/`@css()`/`@script()` content is inert text to it.
 
 **Fix applied — virtual-document bridging** (the technique Vue/Svelte-family extensions use for embedded languages):
+
 - New `editor\vscode\lib\embedded.js` (pure functions, no `vscode` dependency): `findEchoHoles()` finds every
   `@{ ... }` span (brace-depth aware); `findEmbeddedBlocks()` finds every `@css(`/`@script(`/`@js(` body span
   (paren-depth aware), including its own nested echo holes. Both mirror `CastTemplateEngine\Directives::run()`'s
@@ -148,9 +155,9 @@ braces. The TextMate grammar injections (`source.php`/`source.css`/`source.js` s
 - "Full-document masking": every character of the real document becomes a space except newlines (which stay exactly
   where they are), with only the hovered hole's expression (or block's body) left intact — so the hovered
   `vscode.Position` always maps to the identical line/column in the virtual document, with no coordinate
-  translation needed anywhere. (Caught and fixed a bug during implementation: naively overwriting the first *6*
+  translation needed anywhere. (Caught and fixed a bug during implementation: naively overwriting the first _6_
   characters with `"<?php "` would have overwritten the newline that normally sits at character index 5 right after
-  `<?php`, shifting every subsequent line number by one. Fixed to overwrite only the first *5* characters with the
+  `<?php`, shifting every subsequent line number by one. Fixed to overwrite only the first _5_ characters with the
   bare `"<?php"` token, verified with a dedicated test that line counts and every line's length are unchanged.)
 - `extension.js`: added `EmbeddedHovers`/`EmbeddedCompletions` provider classes that locate the enclosing span, open
   (or reuse) the matching virtual document via a `cast-embedded:` content-provider scheme, and forward to VS Code's
@@ -164,6 +171,7 @@ braces. The TextMate grammar injections (`source.php`/`source.css`/`source.js` s
   keystroke plus range remapping) — left as a documented future enhancement.
 
 **Verification performed:**
+
 - New `test/embedded.test.js` (10 tests, all passing): echo-hole detection including nested-brace expressions,
   correctly inactive inside `<? ?>` and live inside `<script>`/`<style>`/`<!-- -->` (matching the real compiler),
   unclosed-hole safety, embedded-block detection with nested holes recorded at document-relative offsets, and
@@ -226,7 +234,7 @@ anywhere in the engine ever adds that class to anything**. Confirmed by reading 
 component (`CastTemplate::component()`/`open()`/`close()`) — none of them touch the rendered HTML's root tag at all.
 Confirmed this is framework-wide, not erp-spa-specific, by checking the engine's **own** starter reference example,
 `cast-template-engine\starter\resources\views\components\button.cast.php`: its `.btn`/`.btn-primary` rules had
-exactly the same problem. This means `@css()` scoping has likely never visually worked for *any* component in *any*
+exactly the same problem. This means `@css()` scoping has likely never visually worked for _any_ component in _any_
 CastFramework app using this engine version.
 
 **Fix applied — a CSS-Modules-style per-class renaming scheme (per your explicit direction, confirmed with your
@@ -234,20 +242,20 @@ CastFramework app using this engine version.
 
 1. **`Assets.php`** — a scope-frame stack (`pushScope()`/`popScope()`): `addStyle()` now also registers the id onto
    whichever frame is on top of the stack, so nested components (and conditionally-rendered root branches, e.g.
-   `@if ($href): <a> @else: <button>` in `button.cast.php`) each get exactly their *own* ids, never a parent's or a
+   `@if ($href): <a> @else: <button>` in `button.cast.php`) each get exactly their _own_ ids, never a parent's or a
    sibling branch's.
 2. **`Css.php`**:
    - `scanClassRenames(string $rawSource)` — a text scan (reusing the existing `closing()` balanced-bracket helper)
      that finds every `@css( ... )` block in a file and maps each class selector it declares (e.g. `.myBtn`) to a
-     per-component unique name, `"<id>-myBtn"` — the *same* `<id>` `compileBody()` computes for that exact body
+     per-component unique name, `"<id>-myBtn"` — the _same_ `<id>` `compileBody()` computes for that exact body
      text (verified byte-for-byte: had to `trim()` the scanned body to match what
      `Directives::parenthesised()` actually hands `compileBody()`, or the two ids silently diverged).
-   - `classNamesIn()` only looks at *selector* text (prelude positions, recursing into `@media`/etc.), never inside
+   - `classNamesIn()` only looks at _selector_ text (prelude positions, recursing into `@media`/etc.), never inside
      a declaration's value, so it can't mistake e.g. a font name or URL fragment for a class name.
    - `scope()`/`block()` now rename every class token it finds via that map. A **pure-class selector** (e.g.
      `.myBtn`, `.myBtn:hover` — checked by `isPureClassSelector()`) is emitted **both** as the flat renamed form
      (`.<id>-myBtn`, no ancestor needed — the hash alone makes it unique) **and** the original ancestor-wrapped form
-     (`.cast-<id> .myBtn`), comma-separated. The second form is a deliberate safety net: a *dynamically built* class
+     (`.cast-<id> .myBtn`), comma-separated. The second form is a deliberate safety net: a _dynamically built_ class
      value (`class="btn-<?= $variant ?>"`, exactly what `button.cast.php` does) can't be renamed at compile time —
      there's no fixed token to match — so it still needs the ancestor class to be styled. A selector that isn't pure
      class (e.g. bare `td`, or `div.card`) keeps the original ancestor-wrap only, since there's no class there (or
@@ -255,14 +263,14 @@ CastFramework app using this engine version.
    - `injectScope(string $html, array $ids)` — adds `cast-<id>` to a rendered component's root element (its first
      HTML tag), merging with any existing `class="..."`/`class='...'`, or adding one if there is none. Handles
      self-closing tags, `>` inside a quoted attribute value, and no-op's safely when the output doesn't start with a
-     tag at all. This is what makes the *ancestor-wrap* half of the scoping actually work (the flat-renamed half
+     tag at all. This is what makes the _ancestor-wrap_ half of the scoping actually work (the flat-renamed half
      doesn't need it).
 3. **`Directives.php`** — `__construct()` takes the class-rename map (threaded through every recursive
    `new Directives(...)` call too) and passes it into `Css::scope()` in the `css` case.
 4. **`Compiler.php`** — `compile()` computes `$this->classRenames = Css::scanClassRenames($source)` once per file,
-   **before** calling `Directives::compile()`, from the *raw* source (so it finds `@css()` blocks regardless of
+   **before** calling `Directives::compile()`, from the _raw_ source (so it finds `@css()` blocks regardless of
    whether they appear before or after the markup that uses their classes — `main.cast.php` has `@css(` at the
-   *bottom* of the file, after the `<li>` that uses `.list-group-item`). A new `renameClassTokens()` rewrites literal
+   _bottom_ of the file, after the `<li>` that uses `.list-group-item`). A new `renameClassTokens()` rewrites literal
    `class="..."` attribute values token-by-token (skipping over any embedded `<?= ... ?>`, left from the `@{ }` pass)
    wherever the plain-HTML-tag path (`htmlTag()`) compiles one.
 5. **`CastTemplate::component()`** — wraps each component's own render in `Assets::pushScope()`/`popScope()`, then
@@ -271,11 +279,12 @@ CastFramework app using this engine version.
    root choice: whichever branch actually rendered gets the class, not just whichever one is written first.
 
 **Verification performed:**
+
 - Unit tests for `Css::injectScope()` against 10 hand-built HTML shapes (existing double/single-quoted class, no
   class attribute, multiple ids, self-closing tags, `>` inside a quoted attribute value, no leading tag at all) —
   all pass; one real bug found and fixed during this (a self-closing tag's `/` ended up in the wrong position).
 - Full-pipeline compile test against `button.cast.php` and `main.cast.php`: confirmed `.da594e8f-btn,
-  .cast-da594e8f .btn{...}` (both forms) in the generated CSS, and `class="da594e8f-btn btn-<?= $variant ?>"` in the
+.cast-da594e8f .btn{...}` (both forms) in the generated CSS, and `class="da594e8f-btn btn-<?= $variant ?>"` in the
   generated markup (the static `btn` token renamed, the dynamic `btn-<?= $variant ?>` left alone for the ancestor
   form to catch).
 - Smoke-compiled all 54 `.cast.php` views across erp-spa and both starter scaffolds; the 16 "component not found"
@@ -300,25 +309,27 @@ only one unambiguous correct form and left uncorrected would have made this fix 
 
 **Symptom (discovered while diagnosing Bug 8):** editing a view, then editing it again shortly after (well within a
 single wall-clock second — e.g. a quick fix-and-revert), the second edit was silently never picked up; the page kept
-serving the *first* edit's content indefinitely, with no error.
+serving the _first_ edit's content indefinitely, with no error.
 
 **Root cause:** `CastTemplate.php`'s `compile()` cache check was `filemtime($target) < filemtime($file)` — a
 **strict** less-than. On a filesystem with second-granularity mtimes (confirmed on this Windows/NTFS setup), a
 source edit landing in the same second as the cache file's own most recent write produces `filemtime($target) ===
 filemtime($file)`, which this check treats as "cache is still fresh" and never recompiles — reproduced directly:
-wrote a marker into a view, confirmed the server rendered it, reverted the file, and the *reverted* (original)
+wrote a marker into a view, confirmed the server rendered it, reverted the file, and the _reverted_ (original)
 content kept NOT showing up even several seconds later, because the cache file itself had been written in that same
 second as the revert.
 
 **Fix applied:** `<` → `<=` in `CastTemplate.php`'s `compile()`:
+
 ```php
 if (!is_file($target) || ($this->checkModified && filemtime($target) <= filemtime($file))) {
 ```
+
 This means a request landing in the exact same second as the most recent compile now always recompiles (a harmless
 extra compile in `checkModified`/dev mode, which is already request-by-request freshness-checked by design) rather
 than ever silently serving stale content.
 
-**Verification performed:** reproduced the staleness with the *old* code (curl showed stale marker content after a
+**Verification performed:** reproduced the staleness with the _old_ code (curl showed stale marker content after a
 revert, confirmed the cache file's mtime exactly matched the source's), applied the fix, cleared the existing stale
 cache file once (pre-dated the fix), then reproduced the same edit/revert/curl sequence — now always serves current
 content immediately, no waiting required.
@@ -331,11 +342,11 @@ content immediately, no waiting required.
 
 **Symptom:** Live reload / HMR did nothing, ever, on every page in this project — not flaky, not slow, just
 completely inert — even though the server endpoint, the `data-cast-dev`/`data-cast-hmr` attributes, and the 800ms
-client poll loop's *code* were all confirmed correct in isolation (see the original Bug 8 static review below).
+client poll loop's _code_ were all confirmed correct in isolation (see the original Bug 8 static review below).
 
 **Root cause:** `cast.module.js`'s `start()` function builds the entire live-reload poll loop **after** an early
 return: `const view = $(config.view); if (!view || !view.hasAttribute('data-cast-page')) return; // not a Cast
-page` — and only *then* did the (now unreachable) code set up `poll()`. `data-cast-page` is a marker the SPA
+page` — and only _then_ did the (now unreachable) code set up `poll()`. `data-cast-page` is a marker the SPA
 mounting system puts on a page's view container; **erp-spa's pages are not SPA-mounted at all** (confirmed: zero
 occurrences of `data-cast-page` anywhere in the rendered page), so `start()` always returned at that line and the
 live-reload block — a feature with its own doc-comment describing it as general "development mode" tooling, nothing
@@ -343,7 +354,7 @@ SPA-specific — silently never ran. Confirmed directly: before the fix, Playwri
 requests to `/_cast/live-reload` over a 4-second window on a loaded page; the server-side endpoint answered
 perfectly the whole time when polled directly with `curl`.
 
-**Fix applied:** moved the entire live-reload block (lines that were previously unreachable) to run *before* the
+**Fix applied:** moved the entire live-reload block (lines that were previously unreachable) to run _before_ the
 `data-cast-page` early return, so it always starts regardless of SPA status. The one behavior that genuinely does
 depend on SPA mounting — `data.type === 'view'` reloading via `load()` (an AJAX-style partial swap) rather than a
 full page reload — is now guarded: it only calls `load()` when there's an actual mounted SPA view
@@ -370,6 +381,7 @@ defaulted the `data-cast-hmr` attribute to the stale string `'sse'` (left over f
 the framework's own changelog) while the server-side default is `'poll'` — normalized to `'poll'` in both places.
 
 **Diagnostic steps that led to Bugs 10 and 11:**
+
 1. `php cast serve` → `curl .../_cast/live-reload?since=0` → `{"status":"ok","changed":false,"time":...}` (200 OK). ✅
 2. Touched a view's mtime, polled again with the previous `time` → `{"changed":true,"type":"view",...}`. ✅ server
    mechanism correct under `php cast serve`.
@@ -380,7 +392,7 @@ the framework's own changelog) while the server-side default is `'poll'` — nor
    Apache — the framework's own "assets not being served" dev warning does not trigger.
 5. **A quick same-second edit/revert test while verifying step 2 more carefully surfaced Bug 10** (stale cache).
 6. **Loading the real page in Playwright and watching the network log for live-reload requests surfaced Bug 11**
-   (the poll loop never starts) — every step above tested the *endpoint* directly; none of them had actually loaded
+   (the poll loop never starts) — every step above tested the _endpoint_ directly; none of them had actually loaded
    the page in a browser and watched whether the client-side code ever calls it, which is where the real bug was.
 
 **Port to CastFramework repo:** `src\Helpers\core.php` (cosmetic `'sse'` → `'poll'` default fix)
@@ -413,7 +425,7 @@ Confirmed live afterward: `document.querySelectorAll('.list-group-item td').leng
 artificially-injected one.
 
 **Live browser verification isolated this correctly:** Playwright's Bug 5 click-handler check creates a `<td>`
-*programmatically* for the duration of the test (not a real fix, just to prove the handler/delegation machinery
+_programmatically_ for the duration of the test (not a real fix, just to prove the handler/delegation machinery
 itself works once given a real matching element) — confirmed `handleEvent`/`cast.js`/the delegation mechanism all
 work correctly; the only missing piece is a real `<td>` in the actual page.
 
@@ -429,10 +441,14 @@ Ran against XAMPP's Apache (`http://localhost/erp-spa/public/`, no project-speci
 
 ```json
 {
-  "strayTrTdDropped": { "tdCountInRealDom": 0 },               // Bug 12 — documented, not fixed
-  "cssApplied": { "rowClass": "c9c6dc12-list-group-item", "paddingTop": "10px", "pass": true },  // Bug 9
-  "clickHandler": { "dialogMessage": "Clicked: #1 ($100)", "pass": true },                       // Bug 5
-  "liveReload": { "markerFound": true, "pass": true }                                            // Bugs 10 & 11
+  "strayTrTdDropped": { "tdCountInRealDom": 0 }, // Bug 12 — documented, not fixed
+  "cssApplied": {
+    "rowClass": "c9c6dc12-list-group-item",
+    "paddingTop": "10px",
+    "pass": true
+  }, // Bug 9
+  "clickHandler": { "dialogMessage": "Clicked: #1 ($100)", "pass": true }, // Bug 5
+  "liveReload": { "markerFound": true, "pass": true } // Bugs 10 & 11
 }
 ```
 
@@ -465,7 +481,7 @@ and fixed in that follow-up pass, in the order it came up.
 **Root cause:** `Directives.php`'s `transformCallback()` (used for `@map`/`@filter` callbacks) and
 `transformInlineRender()` (used for `return(...)`/`@render(...)`) each recompile the extracted callback
 body/markup through a **new, nested** `Directives` instance. That nested instance's line counting always started
-fresh from line 1, relative to the start of the *extracted substring* — not the real file. Confirmed precisely by
+fresh from line 1, relative to the start of the _extracted substring_ — not the real file. Confirmed precisely by
 bisection: a minimal repro with just a docblock and a broken `@{ }` reported the correct line; adding a
 `@map(...)=> return(` wrapper around the same broken `@{ }` made the reported line collapse to a small number near
 the top of the file, regardless of how far down the real mistake was.
@@ -473,7 +489,7 @@ the top of the file, regardless of how far down the real mistake was.
 **Fix applied:** `Directives` now takes an optional `$lineOffset` (the real line, minus 1, where the substring
 being recompiled starts). A matching `lineAt()`/`lineOfOffset()` pair of helpers compute it: `lineOfOffset()` finds
 where an extracted piece of text (a callback's body within its full argument list, a `return(...)`'s markup within
-its surrounding code) starts *by searching for it*, rather than needing exact byte offsets threaded through every
+its surrounding code) starts _by searching for it_, rather than needing exact byte offsets threaded through every
 intermediate `trim()`/regex extraction. Every place that recurses into a new `Directives` instance (4 call sites)
 now computes and passes this offset.
 
@@ -497,9 +513,10 @@ fallback — a real typo (`@fitler(...)`) still fails loudly at compile time, sa
 already have.
 
 **Fix applied:**
+
 - `Directives.php`: new `FUNCTION_DIRECTIVES` map (`htchars`→`htchars`, `route`→`route`, `cast`→`__cast`,
   `csrf`→`__csrf`, `alerts`→`__getAlerts`, `modules`→`__modules`) and a `functionDirective()` method: `@name(args)`
-  → `<?= fn(args) ?>`, bare `@name` (no `(`) → `<?= fn() ?>`. Checked only *after* the existing control-flow
+  → `<?= fn(args) ?>`, bare `@name` (no `(`) → `<?= fn() ?>`. Checked only _after_ the existing control-flow
   directive list, so it can never shadow `@if`/`@map`/etc.
 - **The `@cast` naming collision** (your docs said `@cast(...)` means "alias for `return(...)`", but the layout uses
   it to call the `__cast()` SPA-client helper): resolved as you suggested — renamed the render-alias to
@@ -508,7 +525,7 @@ already have.
 - **A real correctness bug this exposed along the way**: a bare, unbraced attribute value that's a short-echo PHP
   tag (what `@htchars(...)` compiles to before this fix even applied, and what plain `<?= ?>` written directly as a
   bare value has always compiled to) was being torn apart character-by-character by `Compiler.php`'s bare-attribute
-  parser and reassembled by coincidence - it happened to produce the right *text* for simple, space-free values
+  parser and reassembled by coincidence - it happened to produce the right _text_ for simple, space-free values
   (a CSRF token, a URL), but the result was **unquoted** in the final HTML (`href=<?= route('/') ?>`), which breaks
   for any value containing a space. Fixed: `htmlTag()` now recognizes a bare value starting with a PHP tag as one
   atomic unit and wraps it in quotes (`href="<?= route('/') ?>"`), so it's robust for any value, not just ones that
@@ -531,15 +548,15 @@ regression suite: 0 failures (up from 1 failure - this file - before the fix).
 
 ---
 
-## Bug 15 (critical - found testing Bug 9's own fix) — generated scoped class names could be invalid CSS, silently breaking the *entire* stylesheet
+## Bug 15 (critical - found testing Bug 9's own fix) — generated scoped class names could be invalid CSS, silently breaking the _entire_ stylesheet
 
-**Symptom:** after Bug 9 was fixed and verified once, a *later* edit to `main.cast.php` made the exact same CSS
+**Symptom:** after Bug 9 was fixed and verified once, a _later_ edit to `main.cast.php` made the exact same CSS
 stop applying again (`padding-top` back to `0px`) - but this time the class **was** on the element and **was** in
 the `<style>` tag, so it looked like a fresh regression.
 
 **Root cause:** Bug 9's per-class renaming uses `substr(md5($body), 0, 8)` as the unique id, same as the engine's
 existing ancestor-scope id. A CSS identifier can't start with a digit - and an md5 hex id starts with one roughly
-10 times out of 16. The *first* time I verified Bug 9 live, the id happened to start with a letter (`c9c6dc12`) and
+10 times out of 16. The _first_ time I verified Bug 9 live, the id happened to start with a letter (`c9c6dc12`) and
 everything worked; this time it was `941e348f` (starts with `9`). A selector like `.941e348f-list-group` is invalid
 CSS, and - confirmed directly via `document.styleSheets[...].cssRules.length` in a real browser - this didn't just
 drop that one rule, it collapsed the entire inline stylesheet down to a single surviving rule, because the invalid
@@ -549,7 +566,7 @@ only the `td{...}` ancestor-wrap rule surviving) - same bug, caught by you indep
 
 **Fix applied:** `Css::scanClassRenames()` now prefixes every generated class name with `cast-` (`cast-941e348f-
 list-group`, not `941e348f-list-group`) - guaranteeing a valid CSS identifier regardless of what the hash starts
-with. (The *ancestor*-scope class, `cast-<id>`, was never affected - it already had this prefix.)
+with. (The _ancestor_-scope class, `cast-<id>`, was never affected - it already had this prefix.)
 
 **Verification performed:** `document.styleSheets[0].cssRules.length` back to the expected rule count, `getComputed
 Style(row).paddingTop === "10px"` again, confirmed live. Re-ran the full Playwright suite (all 4 checks pass) and
@@ -566,22 +583,21 @@ the full 54-view PHP regression (0 failures).
    opening tag) that mixes both echo styles gets the minority-style ones flagged as a VS Code **Hint** (the
    subtle/dotted underline level, matching the `cast.diagnostics` setting's default) - not an error, since both
    forms compile identically; it's a readability nit. Verified against your exact example (the `name` column using
-   `<?=  ?>` while the rest use `@{ }` gets flagged) and verified it does *not* flag unrelated, non-adjacent blocks
-   or a fully-consistent run. The *wrong-line-number* half of this item was Bug 13 above.
-2. **"CSS/JS indentation on save still fails"** - the underlying indent logic was already fixed in Session 1 (Bug
-   3) and is directly wired to VS Code's format-on-save via `Formatter.provideDocumentFormattingEdits`. The likely
-   real cause: `.cast.php` has no distinct VS Code language id (it's plain `php`), and several *other* PHP
+   `<?=  ?>` while the rest use `@{ }` gets flagged) and verified it does _not_ flag unrelated, non-adjacent blocks
+   or a fully-consistent run. The _wrong-line-number_ half of this item was Bug 13 above.
+2. **"CSS/JS indentation on save still fails"** - the underlying indent logic was already fixed in Session 1 (Bug 3) and is directly wired to VS Code's format-on-save via `Formatter.provideDocumentFormattingEdits`. The likely
+   real cause: `.cast.php` has no distinct VS Code language id (it's plain `php`), and several _other_ PHP
    extensions are active in this workspace (intelephense, DevSense, zobo php-intellisense) that also register a
    formatter for the same `php` language - without an explicit default, VS Code doesn't know which one to run on
    save, so format-on-save may silently do nothing. Added to `.vscode\settings.json`:
    `"editor.formatOnSave": true` and `"[php]": { "editor.defaultFormatter": "anode.cast-framework" }`. Caveat:
-   since there's no separate language id, this applies to *all* `.php` files opened in this workspace, not only
+   since there's no separate language id, this applies to _all_ `.php` files opened in this workspace, not only
    `.cast.php` - reasonable here since the workspace's own PHP is almost entirely `.cast.php`, but worth knowing.
 3. **"@map/@filter hover examples need PHP coloring"** - their hover popup's code fence was an unlabeled ` ``` `
    (no syntax coloring at all), unlike `@css`'s own example which already specified ` ```css `. Labeled both
    ` ```php `.
 4. **"Hover inside `{...}`/`@{...}`, Ctrl+click not working"** - two real gaps, both fixed:
-   - A bare `{...}` *attribute-value* expression (`key={$item['id']}`, `href={route('/')}`) is a different syntax
+   - A bare `{...}` _attribute-value_ expression (`key={$item['id']}`, `href={route('/')}`) is a different syntax
      from an `@{ }` echo hole, and wasn't bridged to real PHP hover/completion at all before now. New
      `findBraceExpressions()` in `lib/embedded.js` detects it (an `=` immediately followed by `{`, skipping real
      `<? ?>` regions so genuine PHP string interpolation like `"a={$y}"` isn't mistaken for one).
@@ -589,7 +605,7 @@ the full 54-view PHP regression (0 failures).
      completion were. New `EmbeddedDefinitions` provider forwards to `vscode.executeDefinitionProvider` against
      the same virtual docs. Known, inherent limitation: a bare `@{ $item['id'] }` hole's virtual doc only contains
      that one expression (everything else masked, see Session 1's `buildPhpVirtual`), so `$item` itself - declared
-     elsewhere in the real file - won't resolve to anything there; a *function* name (`htchars`, `count`) still
+     elsewhere in the real file - won't resolve to anything there; a _function_ name (`htchars`, `count`) still
      resolves fine since it's a real global symbol, not a locally-scoped one.
    - **Your follow-up** ("`@for`, `@foreach(...)`, `@if()` etc don't recognize PHP code inside either; `count()`,
      `is_array()` should get hover docs too") was the same underlying gap at a larger scope: every directive's own
@@ -597,12 +613,12 @@ the full 54-view PHP regression (0 failures).
      `findDirectiveArguments()` covers `@if`/`@elseif`/`@unless`/`@isset`/`@switch`/`@case`/`@for`/`@foreach`/
      `@forelse`/`@while`/`@php`/`@map`/`@filter`/`@break`/`@continue` and the new `FUNCTION_DIRECTIVES` from Bug 14
      - kept in sync with `Directives::WORD`/`FUNCTION_DIRECTIVES` by a comment pointing at the source of truth. A
-     useful side effect for `@map`/`@filter` specifically: since the collection expression and the arrow callback's
-     own `$item`/`$i` parameters are visible in that virtual doc, hovering them (and Ctrl+click to the parameter
-     itself) works correctly there, unlike the isolated-hole case above.
+       useful side effect for `@map`/`@filter` specifically: since the collection expression and the arrow callback's
+       own `$item`/`$i` parameters are visible in that virtual doc, hovering them (and Ctrl+click to the parameter
+       itself) works correctly there, unlike the isolated-hole case above.
    - **Caught by you immediately afterward**: "all @directive expressions take PHP inside them except
      `@render()`/`return(...)`, which take markup" - `@map`/`@filter`'s callback body is routinely
-     `=> return(<Card>...</Card>)` or `=> @render(<Card>...</Card>)`, and the *whole*-argument-list bridging above
+     `=> return(<Card>...</Card>)` or `=> @render(<Card>...</Card>)`, and the _whole_-argument-list bridging above
      was feeding that markup to intelephense labeled as PHP, which isn't valid syntax there and risked breaking
      hover for the genuinely-PHP part too (the collection expression, the arrow params, or - for `@filter`'s 2-arg
      standalone form - the predicate itself). Fixed: `findDirectiveArguments()` now stops the bridged span right
@@ -622,13 +638,13 @@ the full 54-view PHP regression (0 failures).
    `Anode\ErrorHandler\Editor` already supports vscode/cursor/phpstorm/idea/sublime/atom/vscodium/vscode-insiders
    plus any custom `{file}`/`{line}`/`{column}` URL pattern. Added a `choice()` prompt listing the built-in
    editors plus an "Other (custom URL pattern)" option that falls through to a free-text `ask()` - deliberately did
-   *not* guess a URL scheme for Antigravity specifically, since I have no verified source for it; the custom-pattern
+   _not_ guess a URL scheme for Antigravity specifically, since I have no verified source for it; the custom-pattern
    option covers it (and anything else not listed) once you know or find its scheme. The answer writes into
    `config/app.php`'s generated `error_handler` array through the existing generic mechanism, no further wiring
    needed.
 9. **`htchars()`/input-sanitization question - no bug, verified and explained:**
    - Tested `htchars()` directly against every example you gave (`"Company Constraction & Logistics"`,
-     `` "Chin`anga" ``, `"ins't"`, `"couldn't"`, `"Password#^20"`, multi-line text): every one round-trips exactly
+     ``"Chin`anga"``, `"ins't"`, `"couldn't"`, `"Password#^20"`, multi-line text): every one round-trips exactly
      as it should - `&` → `&amp;`, `'` → `&#039;` (safe in both `attr="..."` and `attr='...'` contexts since
      `ENT_QUOTES` is set), and backtick/`#`/`^`/newlines are untouched (none of them are HTML-special, so
      `htmlspecialchars()` correctly leaves them exactly as typed - a newline inside a `<textarea>` renders as a real
@@ -647,14 +663,14 @@ the full 54-view PHP regression (0 failures).
      context, parameterized queries (not string escaping) for SQL. The same stored value might need different
      escaping in different places later, which a one-time "clean it on the way in" pass can't anticipate.
    - **The risk without `htchars()`, even for "just presentation" data from the DB/framework/env/constants:** the
-     risk is specifically about what *characters* end up in an HTML-embedding position, not about where the string
-     originally came from. A DB column is "safe" only if *every* code path that has ever written to it was already
+     risk is specifically about what _characters_ end up in an HTML-embedding position, not about where the string
+     originally came from. A DB column is "safe" only if _every_ code path that has ever written to it was already
      escaping correctly - one missed path (a bulk import, an admin tool, a future feature) and that same "trusted"
      column can carry a stored XSS payload that fires in every other visitor's browser the moment it's displayed
      unescaped. Env vars/hardcoded constants the developer alone controls are lower-risk in practice, but escaping
      them too is cheap (escaping already-safe text like `"Home"` is a no-op) and removes the need to litigate "is
-     *this specific* variable 100% guaranteed safe" case by case - which is exactly the kind of judgment call that,
-     gotten wrong once as a codebase grows, becomes a real vulnerability. Escape *everywhere* text enters HTML,
+     _this specific_ variable 100% guaranteed safe" case by case - which is exactly the kind of judgment call that,
+     gotten wrong once as a codebase grows, becomes a real vulnerability. Escape _everywhere_ text enters HTML,
      unconditionally; no code change needed here, the framework already makes that easy via `htchars()` and the
      `@htchars(...)` directive from Bug 14.
 
@@ -664,17 +680,17 @@ the full 54-view PHP regression (0 failures).
 
 ## Item 1, reopened — hover docs for `@htchars`/`@route`/`@cast`/`@csrf`/`@alerts`/`@modules` were still hardcoded
 
-**Your point:** hovering `@route(...)` and hovering the real `route(` function it compiles to showed *the same*
+**Your point:** hovering `@route(...)` and hovering the real `route(` function it compiles to showed _the same_
 docs already - because I'd hand-written a copy of that doc into `BUILTIN_HOVERS`. Since the real function already
 has a real docblock, hardcoding a second copy is pure duplication that can only drift out of sync over time; the
 editor should read the real function's own doc instead.
 
 **Fix applied:** removed all six hardcoded `BUILTIN_HOVERS` entries for these directives. New
-`FunctionDirectiveHovers` provider: hovering the *directive word itself* (not its arguments - `EmbeddedHovers`/
+`FunctionDirectiveHovers` provider: hovering the _directive word itself_ (not its arguments - `EmbeddedHovers`/
 `findDirectiveArguments` from Bug 14/item 4 already cover those) builds a one-line virtual PHP document containing
 just the real function name (`FUNCTION_DIRECTIVES`, now exported from `lib/embedded.js` so both `extension.js` and
 `Directives.php`'s own copy can be kept in sync by hand against one source of truth) and forwards the hover request
-to it - so `@route(...)` and `route(...)` now ask the *same* real question of the *same* real function, not two
+to it - so `@route(...)` and `route(...)` now ask the _same_ real question of the _same_ real function, not two
 copies of a description. The one exception: `@cast` keeps a short appended note (`FUNCTION_DIRECTIVE_NOTES`) on top
 of `__cast()`'s real doc, warning about the `@render`/`return(...)` naming collision from Bug 14 - that's a
 Cast-specific gotcha the real `__cast()` function's own docblock (about the SPA client) has no reason to mention,
@@ -697,16 +713,17 @@ for you to confirm live, by comparing `@route(...)`'s hover against plain `route
 **Investigated by running the (already-fixed, already-tested) `computeIndents()` directly against the exact live
 content of both files** (`header.cast.php` and `main.cast.php`, as you'd actually written them): the computed
 depths were correct in both cases - `@foreach`/`@if`/nested `<a>`/`@{ }` correctly stepping deeper and back exactly
-as they should, `@css(`/`@script(` content correctly nested. **The indentation *logic* is not broken.** What both
+as they should, `@css(`/`@script(` content correctly nested. **The indentation _logic_ is not broken.** What both
 files actually had was their raw, hand-typed indentation, never auto-formatted since you last edited them - not a
 bug reproducing itself, the formatter simply hadn't run on this content yet.
 
 **What I did:**
+
 1. Reformatted both files directly with the (verified-correct) formatter, so they're correctly indented right now,
    independent of whatever is or isn't happening with format-on-save in the live editor.
 2. Re-checked `package.json`: this extension registers its formatter against a **file-pattern** selector
    (`**/*.cast.php`), not a distinct language id - `.cast.php` is still plain `php` to VS Code, as noted back in
-   the original research. `editor.defaultFormatter` keys off language id, and several *other* PHP extensions
+   the original research. `editor.defaultFormatter` keys off language id, and several _other_ PHP extensions
    (intelephense, DevSense, zobo php-intellisense) are active in this workspace and also offer a `php` formatter -
    consistent with the `.vscode/settings.json` fix from item 2 (Session 2) being the right remedy in principle, but
    I can't confirm from here whether it's actually taking effect live (a workspace-settings change like this should
@@ -715,9 +732,9 @@ bug reproducing itself, the formatter simply hadn't run on this content yet.
    blocker.
 
 **If format-on-save still doesn't trigger after this, next things to actually check** (I can't check these myself
-without a live editor session): (a) Ctrl+Shift+P → "Cast: Fix indentation" on one of these files - if *that* also
+without a live editor session): (a) Ctrl+Shift+P → "Cast: Fix indentation" on one of these files - if _that_ also
 does nothing, something more fundamental is wrong (the extension not loading, wrong version active, etc.) and is
-worth a dedicated look; if it *does* work, the gap is specifically in the format-on-save wiring. (b) Ctrl+Shift+P →
+worth a dedicated look; if it _does_ work, the gap is specifically in the format-on-save wiring. (b) Ctrl+Shift+P →
 "Format Document" once, manually, and watch for an error notification naming which formatter ran or why none did.
 (c) Antigravity's own Settings UI, searching "default formatter" and "format on save", in case it has a
 separate/overriding mechanism from plain `.vscode/settings.json`.
@@ -736,10 +753,10 @@ Session 1 (Bug 3) and again just now.
 immediately after re-verifying everything else in this session.
 
 **Root cause:** Bug 10's own fix (`<` → `<=` in the cache-staleness check) is correct and necessary, but it has a
-side effect: it makes the engine recompile - and `rename()` a fresh file over the cache target - on *every* request
+side effect: it makes the engine recompile - and `rename()` a fresh file over the cache target - on _every_ request
 that lands in the same second as the last compile, not just the first one after an edit. On Windows, `rename()`
 over a target file that another concurrent request still has open via `include()` can be denied (a transient OS
-file lock, normally released within milliseconds) - something that was already *possible* before Bug 10's fix (two
+file lock, normally released within milliseconds) - something that was already _possible_ before Bug 10's fix (two
 requests racing to compile a brand-new file for the first time), but far less likely to actually occur than it
 became once every same-second request also attempts the rename.
 
@@ -760,6 +777,7 @@ failures. Re-ran the full 54-view PHP regression suite (0 failures) and reloaded
 ## Checklist: files to port, by target repo
 
 **CastTemplateEngine** (`D:\APPDEV\xampp\htdocs\CastTemplateEngine`):
+
 - `src\TemplateError.php`
 - `src\Compiler.php` (Bugs 7, 6, 14)
 - `src\Directives.php` (Bugs 6, 9, 13, 14)
@@ -778,6 +796,7 @@ failures. Re-ran the full 54-view PHP regression suite (0 failures) and reloaded
 - `starter\resources\views\components\button.cast.php` (reformatted only, no content change)
 
 **CastFramework** (`D:\APPDEV\xampp\htdocs\CastFramework`):
+
 - `starter\resources\views\layouts\header.cast.php`
 - `starter\resources\views\layouts\footer.cast.php`
 - `src\Helpers\core.php`
@@ -785,6 +804,7 @@ failures. Re-ran the full 54-view PHP regression suite (0 failures) and reloaded
 - `src\Console\Commands\InitCommand.php` (Session 2: editor-link question in `php cast init`)
 
 **Not part of either repo** (erp-spa's own project files, already fixed directly, nothing to port):
+
 - `src\resources\views\components\cards\main.cast.php` (brace typo, CSS comma→semicolon typos; you later added the
   `<table>` wrapper and fixed the `@{ }`/`<?= ?>` mix yourself)
 - `src\resources\views\layouts\header.cast.php` (`@styles`; you later rewrote it to use the new directives)
@@ -794,10 +814,12 @@ failures. Re-ran the full 54-view PHP regression suite (0 failures) and reloaded
 
 **Also already synced** (installed editor-extension copies, for local use — not a repo, nothing to "port" here,
 just noting they're up to date with the CastTemplateEngine changes above):
+
 - `C:\Users\user\.vscode\extensions\anode.cast-framework-1.5.1\{extension.js, lib\*, syntaxes\*}`
 - `D:\.devTools\.antigravity-ide\extensions\anode.cast-framework-1.6.0\{extension.js, lib\*, syntaxes\*}`
 
 **Not fixed, deliberately** — a content/markup decision, not an engine bug (see Bug 12):
+
 - `src\resources\views\components\cards\main.cast.php`'s `<tr>`/`<td>` inside `<li>` with no `<table>`
 
 ---
@@ -808,23 +830,24 @@ just noting they're up to date with the CastTemplateEngine changes above):
 
 **Your point:** "the bridge works, but the params issue is not solved yet" / "param declaration inside a function" —
 the directive-word-to-real-function bridging from Session 3 (`FunctionDirectiveHovers`) and the whole-argument-list
-bridging from Session 2 (`findDirectiveArguments`/`EmbeddedHovers`) both work, but neither helps the *labels* of PHP
+bridging from Session 2 (`findDirectiveArguments`/`EmbeddedHovers`) both work, but neither helps the _labels_ of PHP
 8 named arguments specifically.
 
 **Root cause:** `EmbeddedHovers`/`EmbeddedCompletions`/`EmbeddedDefinitions` all go through `openPhpVirtual()`,
 which uses `buildPhpVirtual()`'s position-preserving masking: the bridged argument text (`route: '/' ,params:[""=>""]
 `) is dropped into a virtual document completely bare, with no enclosing function call. A named argument's label
-only has meaning *inside* an actual call to a real function whose parameters it matches - bare, uncalled text like
+only has meaning _inside_ an actual call to a real function whose parameters it matches - bare, uncalled text like
 `route: '/'` isn't even valid standalone PHP (`route:` alone parses as a `goto` label), so intelephense had no call
 context to resolve `route:`/`params:` against at all, for any `FUNCTION_DIRECTIVES` call specifically (`@route`,
 `@htchars`, `@cast`, `@csrf`, `@alerts`, `@modules`).
 
 **Fix applied:**
+
 - `lib/embedded.js`: `findDirectiveArguments()` now also returns each span's directive `word` (e.g. `"route"`),
   needed to look up the real function it maps to.
 - `lib/embedded.js`: three new pure functions -
   - `buildCallVirtual(fnName, argsText)` → `` `<?php ${fnName}(${argsText})` `` - a virtual document that actually
-    *calls* the real function with the real argument text, instead of bare masking, giving named-argument labels a
+    _calls_ the real function with the real argument text, instead of bare masking, giving named-argument labels a
     real call to resolve against.
   - `offsetToLineChar(text, offset)` / `lineCharToOffset(text, lineChar)` - a flat-offset ↔ `{line, character}`
     pair, needed because prepending `` `<?php ${fnName}(` `` shifts every position on that line, so (unlike every
@@ -846,9 +869,10 @@ context to resolve `route:`/`params:` against at all, for any `FUNCTION_DIRECTIV
   translation in practice.
 
 **Verification performed:**
+
 - Standalone `node -e` scripting during development confirmed the core translation math: for
   `@route(route: '/' ,params:[""=>""] )`, `findDirectiveArguments` gives `word: "route"`; `buildCallVirtual("route",
-  argsText)` gives `` `<?php route(route: '/' ,params:[""=>""] )` ``; the real offset of `route:`'s start translates
+argsText)` gives `` `<?php route(route: '/' ,params:[""=>""] )` ``; the real offset of `route:`'s start translates
   to `{line: 0, character: 12}`, which lands exactly on the `r`; the round-trip through `lineCharToOffset` matches
   exactly.
 - `node --check extension.js` / `node --check lib/embedded.js`: clean.
@@ -889,7 +913,7 @@ untouched - correct, since heredoc whitespace can be semantically meaningful (e.
 `/* */` comment was piggy-backing on that exact same "heredoc" scanner mode (same `this.mode = "heredoc"` in both
 `scanPhp()` and the Bug-3 `scanBlock()`), so it inherited the identical "leave every line exactly as typed, forever"
 behavior - appropriate for a heredoc, not for a doc comment, where the whole point of Bug 3's fix was that code
-*should* get real, computed indentation.
+_should_ get real, computed indentation.
 
 **Fix applied:** split `/* */` comments out into their own distinct `"blockcomment"` mode in both `scanPhp()` and
 `scanBlock()` (real `<<<EOT` heredocs/nowdocs keep the old `"heredoc"` mode, untouched, unchanged). A `blockcomment`
@@ -901,6 +925,7 @@ own `/**` opener) - detected purely from the line's own text, not threaded throu
 PHP/JS code is never valid starting with a bare `*` at statement position.
 
 **Verification performed:**
+
 - New tests in `test/indent.test.js` (3 new cases, all passing): a misaligned docblock inside plain `<?php ?>` gets
   reindented and `*`-aligned; the identical fix applies inside `@script()`/`@css()` block content; an
   already-correctly-aligned docblock (matching the ` * text` convention already used throughout this engine's own
@@ -927,7 +952,7 @@ limitation ("a bare `@{ $item['id'] }` echo hole... `$item` alone won't resolve 
 bug") was reopened: you want it actually fixed, not just documented.
 
 **Root cause:** every bridged span (an echo hole, a brace expression, a directive's own arguments) gets its own
-completely isolated virtual document containing *only* that one expression - so a variable declared by something
+completely isolated virtual document containing _only_ that one expression - so a variable declared by something
 else entirely (a `@foreach (... as $item)`'s loop variable, a `@map`/`@filter` callback's own `($item, $i) =>`
 parameters) has no declaration anywhere in that isolated document to resolve against, even though the two are right
 next to each other in the real file. This affected both the most common real case in your own files - every
@@ -945,16 +970,17 @@ provider). Fixed by adding the missing names to the `require(...)` line.
 
 **Fix applied:** new `findScopes(src)` in `lib/embedded.js` - every directive that introduces variables visible
 later in the file, and the region they're visible in:
+
 - `@map`/`@filter`: the collection + arrow params (the same span `findDirectiveArguments` already truncates before
-  `return(`/`@render(`), visible only inside that *same* call's own markup.
+  `return(`/`@render(`), visible only inside that _same_ call's own markup.
 - `@foreach`/`@forelse`/`@for`/`@while`: the loop's own keyword + arguments (its `@` excluded, so the virtual
   document reads as real PHP control flow, e.g. `foreach ($items as $item)` - not `@foreach (...)`, which isn't
-  valid PHP; `@` only prefixes an *expression*, never a keyword), visible from the loop's own `)` up to the matching
+  valid PHP; `@` only prefixes an _expression_, never a keyword), visible from the loop's own `)` up to the matching
   `@end<word>` - depth-aware, so the same loop word nested inside itself (a `@foreach` inside a `@foreach`) is
   tracked correctly. `scopesAt(src, offset)` returns every scope (outermost first) whose body actually encloses a
   given offset - there can be more than one, for a span nested several directives deep.
 - `buildPhpVirtual()` (echo holes, brace expressions, plain directive arguments) takes an optional 4th argument:
-  each enclosing scope's own declaration is *also* unmasked, at its real, untranslated position - scopes always sit
+  each enclosing scope's own declaration is _also_ unmasked, at its real, untranslated position - scopes always sit
   earlier in the file than the span using them, so this never shifts the bridged expression's own position; the
   hovered position still never needs translating, same as before.
 - `buildCallVirtual()` (the FUNCTION_DIRECTIVES call-wrap from the named-argument fix) takes an optional
@@ -964,9 +990,10 @@ later in the file, and the region they're visible in:
   `scopesAt()` and pass the result through.
 
 **Verification performed:**
+
 - Manual end-to-end checks (`node -e`) against the real, live content of both `main.cast.php` and
   `header.cast.php`: the echo hole `@{ $item['id'] }` nested inside `@map(...)=> return(...)` now builds a virtual
-  doc containing `$items, ($item, $i)=>` *and* `$item['id']`, both unmasked at their real positions; `@route($path)`
+  doc containing `$items, ($item, $i)=>` _and_ `$item['id']`, both unmasked at their real positions; `@route($path)`
   inside `@foreach (... as [$label, $path, $private])` now builds
   `<?php foreach ((array) config('app.menu', []) as [$label, $path, $private]); route($path)`, with the hovered
   position translated to land exactly on `$path`.
@@ -1005,7 +1032,7 @@ function` at `cast.module.js:552`, thrown from inside `load()`, triggered by a c
 
 **Root cause:** `cast.module.js` defines a module-private `url(path)` helper (line 25, resolves an app-relative path
 against `castBase`) that every other caller in the file - e.g. `http()`'s `url(options.url)` at line 175 - calls
-*directly*, relying on closure scope (it is never, and was never meant to be, a method on the public `window.Cast`
+_directly_, relying on closure scope (it is never, and was never meant to be, a method on the public `window.Cast`
 object built later in the file). `load()` alone called `window.Cast.url(path)` instead - `window.Cast` has no `url`
 property at all, so this always threw the moment `load()` ran, i.e. on the very first SPA navigation. Confirmed by
 grep: every other call site in the file uses the bare closure function; this was the one place that didn't.
@@ -1048,14 +1075,15 @@ like hover/completion/definition were before their own bridges existed.
 `vscode.languages.registerInlayHintsProvider(SELECTOR, new EmbeddedInlayHints())` (guarded the same way as the
 existing formatter registration, for hosts/test mocks without the API). Unlike every other embedded provider here
 (asked about a single cursor position), inlay hints are requested for a whole visible `range` at once, so
-`provideInlayHints()` loops `findDirectiveArguments()` and bridges *every* `FUNCTION_DIRECTIVES` call overlapping
+`provideInlayHints()` loops `findDirectiveArguments()` and bridges _every_ `FUNCTION_DIRECTIVES` call overlapping
 that range - reusing `openCallVirtual()` exactly as-is (the same call-wrapped virtual document built for the
-named-argument hover fix earlier this session, so an *omitted* parameter also gets a hint, e.g. `params: []` for
+named-argument hover fix earlier this session, so an _omitted_ parameter also gets a hint, e.g. `params: []` for
 `route()`'s second parameter, matching what the real function call shows). Each returned hint's own position (and
 `paddingLeft`/`paddingRight`/`tooltip`) is copied across, translated back to the real document via `toReal` -
 exactly the same translation already proven correct for hover ranges.
 
 **Verification performed:**
+
 - `node --check extension.js`: clean.
 - New test in `test/extension.test.js`: confirms `EmbeddedInlayHints` registers under its own `providers.inlayHints`
   slot when the host API is present (extended `test/mock-vscode.js` with `registerInlayHintsProvider` + a minimal
@@ -1086,46 +1114,48 @@ exactly the same translation already proven correct for hover ranges.
 ## Item 4, a real bug found in the previous "fix" - @map/@filter's own scope exposure was never actually valid PHP
 
 **Your point:** "so that didnt work, inlay vars, $var ctrl click still not working inside the directives" - after the
-Inlay Hints bridge and the scope-exposure fix earlier in this session, Ctrl+click on a variable like `$item` inside
-`@{ $item['id'] }` (nested in a `@map(...)` callback) was still not resolving.
+Inlay Hints bridge and the scope-exposure fix earlier in this session, Ctrl+click on a variable like `$item`inside`@{ $item['id'] }`(nested in a`@map(...)` callback) was still not resolving.
 
 **Root cause - a genuine bug in the earlier fix, not just "needs a reload":** the earlier scope-exposure fix unmasked
 `@map`/`@filter`'s own raw text, `($item, $i)=> `, directly into the bridged virtual document. Two separate, real
 problems with this, found re-examining it:
+
 1. That text is not valid PHP at all - a real PHP arrow function always requires the `fn` keyword (`fn($item, $i) =>
-   ...`); bare `(params) => expr` is a parse error on its own.
-2. Even with `fn` added, it would *still* be wrong: an arrow function's own parameters are scoped **only to its own
+...`); bare `(params) => expr` is a parse error on its own.
+2. Even with `fn` added, it would _still_ be wrong: an arrow function's own parameters are scoped **only to its own
    body expression** - unlike a `foreach` loop's variable (which has no block scope in PHP and stays visible for the
    rest of the enclosing script after the loop), a closure/arrow function's parameters never leak into separately
    bridged code that merely sits textually after it. No amount of valid syntax would have fixed this - the approach
    itself didn't match how PHP scoping actually works for this construct.
 
 **Fix applied:** `findScopes()` in `lib/embedded.js` now returns one of two distinct scope shapes:
+
 - `{kind: "verbatim", start, end}` for `@foreach`/`@forelse`/`@for`/`@while` - unchanged from before: the loop's own
   real keyword + arguments, reused as-is, since PHP's flat (non-block) scoping genuinely does make a loop variable
   visible to later code the same script.
 - `{kind: "synthetic", text}` for `@map`/`@filter` - a **constructed** `foreach ($collection as $key => $value)`
   (or `foreach ($collection as $value)` for a 1-parameter callback) standing in for the callback's own `($item, $i)
-  => `. A `foreach` is both valid, complete PHP on its own *and* has the same leaking scope the callback
+=> `. A `foreach` is both valid, complete PHP on its own _and_ has the same leaking scope the callback
   conceptually has - unlike a real arrow/closure function, which never would, regardless of syntax. The collection
   expression and parameter names are still pulled from the real source text (via a new `CALLBACK_PARAMS` regex
   anchored on the callback's own `(...) =>`), so what's exposed still reflects what you actually wrote - only the
-  *shape* around it is substituted. Only 1- and 2-parameter callbacks are recognised (matching this engine's own
+  _shape_ around it is substituted. Only 1- and 2-parameter callbacks are recognised (matching this engine's own
   documented callback shapes, `fn($item)`/`fn($item, $index)`); anything else is skipped rather than guessed at.
 - New `scopeText(src, scope)` reads either shape uniformly (real source slice for "verbatim", the constructed string
   for "synthetic") - every caller goes through this now, instead of reaching into scope-specific fields directly.
 
 **A second, related design cleanup, since the first implementation's "preserve every position, unmask in place" trick
-turns out not to generalize to synthetic text:** `extension.js`'s `openPhpVirtual()` now branches: a span with *no*
+turns out not to generalize to synthetic text:** `extension.js`'s `openPhpVirtual()` now branches: a span with _no_
 enclosing scope still uses the original, fully-tested position-preserving masking (`buildPhpVirtual`, zero
-translation, unchanged from every earlier session). A span *with* an enclosing scope now goes through the exact same
+translation, unchanged from every earlier session). A span _with_ an enclosing scope now goes through the exact same
 translation-based approach `openCallVirtual`'s named-argument call-wrap already used (factored out into a shared
-`openTranslated()` helper) - the scope's own declaration(s) are placed *before* the span in a short, self-contained
+`openTranslated()` helper) - the scope's own declaration(s) are placed _before_ the span in a short, self-contained
 virtual snippet (`buildScopedVirtual`, a new general `<?php + scopePrefix + head + body + tail` primitive;
 `buildCallVirtual` is now a thin wrapper over it), with the hovered position - and any result position, via
 `toReal` - translated explicitly via `offsetToLineChar`/`lineCharToOffset`, the same proven technique.
 
 **Verification performed:**
+
 - Direct end-to-end check (`node -e`) against the real, live content of both files: `@{ $item['name'] }` nested
   inside `main.cast.php`'s `@map(...)` now bridges to
   `<?php foreach ($items as $i => $item); $item['name']` - genuinely valid, complete PHP where `$item` used after
@@ -1135,7 +1165,7 @@ virtual snippet (`buildScopedVirtual`, a new general `<?php + scopePrefix + head
   was already architecturally sound - `@foreach` is a real loop in real PHP either way).
 - Rewrote the affected tests in `test/embedded.test.js` to match the new `kind`/`scopeText()` shape (9 scope/virtual
   tests total, including one new case for the 1-parameter callback form, `foreach ($items as $item)` not `as $key =>
-  $value`); all passing.
+$value`); all passing.
 - `node --check extension.js` / `node --check lib/embedded.js`: clean.
 - Full suite re-run: 111 tests, 108 pass (the same 3 pre-existing environment-gap failures noted in every earlier
   session).
@@ -1164,11 +1194,12 @@ file was not found," instead of jumping anywhere useful. Confirmed via screensho
 completely untranslated. That was harmless for every definition bridged so far (a real function/class always lives
 in its own real file, nothing to translate) - but the scope-exposure fix earlier in this session means a variable's
 definition can now legitimately resolve to the **scope's own declaration**, which - for a "verbatim" scope
-(`@foreach`'s own real text) *or* a "synthetic" one (`@map`/`@filter`'s constructed `foreach` stand-in) - physically
-lives inside the *virtual* document, not the real one. VS Code tried to open that result's `cast-embedded:` URI as
+(`@foreach`'s own real text) _or_ a "synthetic" one (`@map`/`@filter`'s constructed `foreach` stand-in) - physically
+lives inside the _virtual_ document, not the real one. VS Code tried to open that result's `cast-embedded:` URI as
 an actual editor tab and failed, since it is a throwaway, in-memory document, not a real file on disk.
 
 **Fix applied:**
+
 - `findScopes()` now also records `at` (every scope) - the real offset of the directive's own `@word` - a fallback
   jump target for a "synthetic" scope's declaration, which, being constructed rather than sliced from one real
   place, has no single real range of its own to point at.
@@ -1176,7 +1207,7 @@ an actual editor tab and failed, since it is a throwaway, in-memory document, no
   **exact virtual-document boundaries of every segment** that goes into the virtual text - each scope's own
   declaration, the `head`/`tail` wrapping text (e.g. `route(`/`)`), and the span's own real text - not just the
   single span range it tracked before. `toReal()` now maps any virtual position by finding which segment it falls
-  in: inside a "verbatim" scope's own segment, it maps to that scope's exact real range (an *exact* jump, same as
+  in: inside a "verbatim" scope's own segment, it maps to that scope's exact real range (an _exact_ jump, same as
   clicking the real `@foreach` text itself); inside a "synthetic" scope's segment, there is no real range to map
   proportionally into, so it uses that scope's own `at` instead (jumps to the real `@map(...)`/`@filter(...)` call);
   inside `head`/`tail` (literal call syntax with no real counterpart at all), it falls back to the span's own
@@ -1187,6 +1218,7 @@ an actual editor tab and failed, since it is a throwaway, in-memory document, no
   is left exactly as it was.
 
 **Verification performed:**
+
 - Simulated the full translation path end-to-end (`node -e`, matching `openTranslated`'s own segment math exactly)
   against both real files: a definition landing inside `main.cast.php`'s synthetic `@map` scope (clicking `$item`)
   now correctly translates to the real `@map($items, ($item, ...` call's own position (the documented fallback,
@@ -1214,17 +1246,18 @@ that i can distinguish between unclosed brackets and actual @directive(...) scop
 appear red. make the italics" - a pure syntax-highlighting request this time, not a bridging/behavior one.
 
 **Root cause (why they're red today):** `@css(`/`@script(`/`@js(`/`@map(`/`@filter(`'s own parentheses were scoped
-as `punctuation.section.embedded.begin/end.cast keyword.control.directive.cast` - the *same* `keyword.control`
+as `punctuation.section.embedded.begin/end.cast keyword.control.directive.cast` - the _same_ `keyword.control`
 family scope PHP's own `if`/`foreach`/`switch` keywords get. Many themes (apparently including yours) colour
 `keyword.control` red or a similarly "this is important/different" hue - the exact same visual language a lot of
 themes also use for a genuinely unmatched/invalid bracket, making the two indistinguishable at a glance, which was
 the actual complaint.
 
 **Fix applied, in `editor\vscode\syntaxes\cast-injection.tmLanguage.json`:**
+
 - `@css`/`@script`/`@js` (already had their own dedicated grammar rules) and a **new** `directive-styled` rule for
   `@map`/`@filter`/`@scripts`/`@styles` (split out of the generic `directive` rule, which still handles `@if`/
   `@foreach`/`@switch`/etc. completely unchanged - this group was never meant to look like them) now give their own
-  keyword an *additional* scope, `keyword.control.directive.styled.cast`, and their own `(`/`)` an *additional*
+  keyword an _additional_ scope, `keyword.control.directive.styled.cast`, and their own `(`/`)` an _additional_
   scope, `punctuation.section.directive.scope.begin/end.cast` - both **added alongside**, not replacing, the
   existing scopes, so nothing that depended on `keyword.control.directive.cast` being present (several already-
   passing tests do) changed at all.
@@ -1232,18 +1265,18 @@ the actual complaint.
   it fell through to generic PHP `->`-less method-call text with no Cast-specific scope at all) now gets the exact
   same treatment: two new rules, `directive-chain` (matches the chain's own `@$items`/`@items` start, only when
   followed by `.filter`/`.map`) and `fluent-chain-styled` (each `.filter(...)`/`.map(...)` segment, chainable -
-  confirmed a `.filter(...).map(...)` chain styles *both* segments, each with its own accented parens).
+  confirmed a `.filter(...).map(...)` chain styles _both_ segments, each with its own accented parens).
 - **Scoped precisely, confirmed not to leak**: a control case (`@if (...)`) confirms `@if`'s keyword and parens get
-  *neither* new scope, while still keeping the original `keyword.control.directive.cast` they always had - this is
+  _neither_ new scope, while still keeping the original `keyword.control.directive.cast` they always had - this is
   additive styling for exactly the set of directives you named, nothing else.
 - **The actual bold/italic/underline/colour**, in `package.json`'s new `contributes.configurationDefaults` block:
-  an extension's *grammar* only assigns scope *names* - it cannot force a colour or font style on its own, that is
+  an extension's _grammar_ only assigns scope _names_ - it cannot force a colour or font style on its own, that is
   always the active theme's job. `configurationDefaults` is the standard mechanism an extension uses to ship a
-  sensible *default* appearance for its own scopes regardless of the user's theme (merged into the effective
+  sensible _default_ appearance for its own scopes regardless of the user's theme (merged into the effective
   settings for everyone with the extension installed, unless overridden by the workspace's or your own
   `editor.tokenColorCustomizations`). Mapped `keyword.control.directive.styled.cast` → `fontStyle: "bold italic
-  underline"` (no colour override - your theme's own `keyword.control` colour still shows through for the word
-  itself, only its *style* changes) and both new bracket scopes → `foreground: "#D7BA7D"` (a warm gold/amber,
+underline"` (no colour override - your theme's own `keyword.control` colour still shows through for the word
+  itself, only its _style_ changes) and both new bracket scopes → `foreground: "#D7BA7D"` (a warm gold/amber,
   chosen specifically to read as structural rather than alarming - tell me if you'd rather a different colour, it's
   a one-line change). **Updated to `#7B68EE`** (medium slate blue, a blue-purple blend) right after, per your
   explicit follow-up ("yes use blue,purple") - same three files (vendor + both installed copies), re-validated as
@@ -1261,6 +1294,7 @@ figure quoted all session - one of those three was this, now resolved for real; 
 `tests/fixtures/components` gap, still a real gap, just a different and smaller one).
 
 **Verification performed:**
+
 - Direct tokenization checks (`node -e`, using the now-working `test/tokenize.js`) against every named construct:
   `@css(`, `@script(`, `@map(`, `@filter(`, bare `@scripts`/`@styles`, and the fluent `.filter(...).map(...)` chain
   (both segments) - all correctly carry the new styled-keyword and accented-bracket scopes. A control check
@@ -1268,7 +1302,7 @@ figure quoted all session - one of those three was this, now resolved for real; 
   `keyword.control.directive.cast` scope is still present there, unchanged.
 - New test in `test/grammar.test.js` (1 new case, 11 assertions, all passing) codifying all of the above
   permanently, not just a one-off manual check.
-- Full suite re-run with the grammar tests *actually running* (not skipped) for the first time: 127 tests, 125 pass
+- Full suite re-run with the grammar tests _actually running_ (not skipped) for the first time: 127 tests, 125 pass
   (the only remaining failures are the unrelated `docblock.test.js` fixtures gap).
 - `node -e "JSON.parse(...)"` on both the grammar file and `package.json`: valid JSON, both machines.
 - Synced the updated grammar file into both installed extension copies, and applied the identical
@@ -1278,7 +1312,7 @@ figure quoted all session - one of those three was this, now resolved for real; 
 - Live page unaffected (confirmed 200) - this change touches only editor-side syntax highlighting, nothing in the
   compiled output.
 - **Needs a window reload to take effect**, same as every `extension.js`/grammar change this session - and for a
-  *grammar* file specifically, VS Code also re-tokenizes lazily per-file, so a reload is the reliable way to see it
+  _grammar_ file specifically, VS Code also re-tokenizes lazily per-file, so a reload is the reliable way to see it
   update everywhere at once rather than only on the next edit to each open file.
 
 **Port to CastTemplateEngine repo:** `editor\vscode\syntaxes\cast-injection.tmLanguage.json`,
@@ -1326,10 +1360,11 @@ re-emitting the runtime on every navigation (which the SPA-nav fix below now doe
 window.Cast on every single navigation, not just once per page load.
 
 **Fix applied:**
+
 1. cast.js: `root.Cast = root.Cast ? Object.assign(root.Cast, Cast) : Cast;` - merges onto an existing window.Cast
    instead of replacing it. Confirmed via grep that cast.module.js's own exported properties
    (version/load/http/page/token/url/clearErrors/configure/guard/page_key) and cast.js's
-   (on/update/refresh/onLoad/triggerLoad/_loadCallbacks) never collide - a safe, lossless merge.
+   (on/update/refresh/onLoad/triggerLoad/\_loadCallbacks) never collide - a safe, lossless merge.
 2. Cast\Core\View::castResponse()'s partial branch now also reads Assets::getStyles()/getScripts() (both
    already-existing, previously-uncalled public methods - id => content maps, not rendered HTML) right after
    rendering the partial, and includes them in the envelope as new styles/scripts keys (defaulted to an empty array
@@ -1359,6 +1394,7 @@ card reappear on SPA nav until the partial file is updated to actually include i
 your own content, not vendor code - say the word if you'd like it updated to match.
 
 **Verification performed:**
+
 - Standalone PHP: rendering cards/main (a component with both @css() and @script()) directly confirms
   Assets::getStyles()/getScripts() return exactly one entry each, keyed by its stable content-hash id, with the
   expected (already-scoped) CSS and script bodies.
@@ -1395,13 +1431,13 @@ it possible to actually test this live at all.
 
 **Bug 19 - the "whole page" response branch (used whenever the guard changes between pages, e.g. navigating to
 `/login` and back) has the identical gap Bug 18 fixed for the partial branch, for a different reason:**
-`castResponse()`'s `type === 'page'` branch (`View.php`) does run `renderWithLayout()`, which *does* run `@styles`/
+`castResponse()`'s `type === 'page'` branch (`View.php`) does run `renderWithLayout()`, which _does_ run `@styles`/
 `@scripts` - but `extractDocument()` only keeps what was between `<body>` and `</body>`, and `@styles`' `<style>`
 tag lives in `<head>` (`header.cast.php`) - so it's discarded before the envelope is even built, same end result as
-Bug 18 (CSS never arrives), different mechanism. `@scripts`' own `<script>` tag *is* technically within the kept
+Bug 18 (CSS never arrives), different mechanism. `@scripts`' own `<script>` tag _is_ technically within the kept
 `<body>` range, but it would not matter either way: `swap()`'s own existing comment already says inline scripts set
 via `target.innerHTML` never execute. **This is not a rare edge case for this app specifically: `/` is the only
-`'public'`-guard page it has** (every other route is `'auth'` or `'private'`), so navigating to *any* other page and
+`'public'`-guard page it has** (every other route is `'auth'` or `'private'`), so navigating to _any_ other page and
 back to home always goes through this exact branch, not the partial one - "navigate away and back" was hitting this
 gap essentially every time. Fixed the same way as Bug 18: `$payload['styles'] = Assets::getStyles();` /
 `$payload['scripts'] = Assets::getScripts();` added here too (`Assets`'s buffers are only ever read, never cleared,
@@ -1409,29 +1445,34 @@ so they still hold the same data `renderStyles()`/`renderScripts()` just read mo
 
 **Bug 20 - found testing Bug 19's own fix: a component script injected via `syncComponentStyles`/`Scripts` could
 silently wipe itself the moment it was added, for a whole-page swap specifically:** the original `syncComponentAssets()`
-ran entirely *before* `swap()`'s own `target.innerHTML = data.html` line - harmless for a partial swap (`target` is
-`#cast-view`, a descendant of `<body>`, so replacing *its* children never touches a script appended directly to
+ran entirely _before_ `swap()`'s own `target.innerHTML = data.html` line - harmless for a partial swap (`target` is
+`#cast-view`, a descendant of `<body>`, so replacing _its_ children never touches a script appended directly to
 `<body>`), but for a whole-page swap `target` **is** `document.body` itself: appending a `<script data-cast-component>`
 to `document.body` and then immediately replacing `document.body`'s entire `innerHTML` removes the very tag just
 added. The script's own code still ran once (browsers execute a script synchronously the moment it's appended, not
 deferred), so the symptom was subtle - a delegated `handleEvent()`/`Cast.on()` listener still worked correctly the
 first time, the element just never actually persisted in the DOM - but it was fragile and not something to leave as
-an implicit assumption. Split `syncComponentAssets()` into `syncComponentStyles()` (still runs *before* the swap,
+an implicit assumption. Split `syncComponentAssets()` into `syncComponentStyles()` (still runs _before_ the swap,
 in `<head>`, which nothing ever wipes - keeps the original flash-of-unstyled-content avoidance) and
-`syncComponentScripts()` (moved to run *after* the swap, so it is never applied to a `target` about to be replaced).
+`syncComponentScripts()` (moved to run _after_ the swap, so it is never applied to a `target` about to be replaced).
 
 **Full live verification (Playwright), the exact scenario reported - "navigate away from home and back":**
+
 ```json
 {
   "initialPadding": "10px",
   "afterPadding": "10px",
-  "rowCount1": 3, "rowCount2": 3,
+  "rowCount1": 3,
+  "rowCount2": 3,
   "dialogsAfterTwoClicksAcrossTwoNavCycles": 2,
   "dialogMessages": ["Clicked: #1 ($100)", "Clicked: #1 ($100)"],
-  "styleTagCount": 1, "scriptTagCount": 1,
-  "windowCastOk": true, "errors": []
+  "styleTagCount": 1,
+  "scriptTagCount": 1,
+  "windowCastOk": true,
+  "errors": []
 }
 ```
+
 Sequence: load `/` (full) → confirm the card's `padding-top` is `10px` → full-navigate to `/login` (a guard change -
 exercises the exact branch Bug 19 fixed) → `window.Cast.load('/', {push:false})` (SPA, no reload) → confirm `padding-top`
 is **still** `10px` (it was `0px` before this round's two fixes - the literal symptom, now gone) → click a `<td>`,
@@ -1473,8 +1514,8 @@ string $label, // no default - required
 
 Confirmed with you before building: `extends::OtherComponent{...}` (inheriting another component's declared props)
 is a deliberate, separate follow-up - it needs genuinely new cross-file-read infrastructure the compiler has no
-analog for today, not built this round. "Compile-time error" means a required prop *definitely* missing from a
-call (no matching attribute, no spread) fails compiling the *calling* template; a value's actual *type* mismatch
+analog for today, not built this round. "Compile-time error" means a required prop _definitely_ missing from a
+call (no matching attribute, no spread) fails compiling the _calling_ template; a value's actual _type_ mismatch
 can only be caught the first time the component renders with that data (PHP can't statically type an arbitrary
 expression like `color={$dynamicColor}`) - no silent coercion either way, matching this project's existing
 `declare(strict_types=1)` everywhere.
@@ -1493,22 +1534,22 @@ expression like `color={$dynamicColor}`) - no silent coercion either way, matchi
   `check()` is the runtime half: validates a prop's actual value (or its already-evaluated default) against its
   declared type(s) - `int` accepted for a `float`-typed prop (PHP's own lossless widening under `strict_types`, not
   a coercion), everything else rejected outright.
-- **`Compiler.php`**: `@props{}` is replaced *in place* with a prelude of `Props::check()` calls - not relocated to
+- **`Compiler.php`**: `@props{}` is replaced _in place_ with a prelude of `Props::check()` calls - not relocated to
   the very top of the file. A real bug found and fixed while building this: `declare(strict_types=1);` has to
   remain the literal first statement (`CastTemplate::compile()`'s own cache step strips it via a regex anchored to
   the start of the file - a component-first prelude would have broken that, which is exactly what happened before
   this fix: `strict_types declaration must be the very first statement`). Leaving the prelude exactly where
   `@props{}` itself was - which the compiler already requires to be before any markup - keeps it after any such
   leading setup code without needing to find or reason about where that code ends.
-- **Call-site compile check**: `componentTag()`/`attributes()`/`expression()` now read a *target* component's own
+- **Call-site compile check**: `componentTag()`/`attributes()`/`expression()` now read a _target_ component's own
   declared `@props{}` (a light text read via `Props::scan()`, not a recursive compile - cached per resolved path
   per `compile()` call) and fail the **calling** template's own compile with a `TemplateError` when a required prop
   is definitely missing - unless a `{...$spread}` is present (the compiler can't know what it supplies) or a
   `<Slot name="x">` supplies it instead (matches the editor's own existing `isProvidedBySlot()` diagnostic - without
   this, any template supplying a required prop only via `<Slot>` would have broken the moment that component adopted
   `@props{}`). Slot-deferral works by extending the open-tag stack to carry its own still-missing list, cleared by a
-  matching `<Slot>` and checked at the closing tag (using the *opening* tag's own line for the error).
-- **Mixing conventions**: a name declared in `@props{}` that *also* still has a `$name ??= ...;` line for itself is
+  matching `<Slot>` and checked at the closing tag (using the _opening_ tag's own line for the error).
+- **Mixing conventions**: a name declared in `@props{}` that _also_ still has a `$name ??= ...;` line for itself is
   a hard compile error (the prelude already assigns it unconditionally, so the old line would be silent dead code).
 - **Defensive backstop**: `Directives.php`'s unknown-directive detector now also matches `@word{` (not just
   `@word(`/`@endword`), so a stray/mistyped `@props{}` (confirmed: `@Props{}` with a typo'd capital letter, which
@@ -1519,16 +1560,16 @@ expression like `color={$dynamicColor}`) - no silent coercion either way, matchi
   instead of the inert pasted text, reordered to sit before any markup. Three corrections made and flagged, not
   silently fixed: `bool $version = Application::VERSION` → `string` (that constant is a version string, not a bool
   - your own example would otherwise throw on every render, which is correct per the new rule but makes the file
-  unusable for testing anything else); `somefunction('$arg')` → `strtoupper('demo')` (`somefunction` isn't real,
-  would throw "undefined function" on every render); `btn-soft.cast.php` uses a plain `@props{}` for now, not
-  `extends::`, per the scope decision above - it still demonstrates every other feature (a function-call default, a
-  class-constant default, a required-no-default prop) live.
+    unusable for testing anything else); `somefunction('$arg')` → `strtoupper('demo')` (`somefunction` isn't real,
+    would throw "undefined function" on every render); `btn-soft.cast.php` uses a plain `@props{}` for now, not
+    `extends::`, per the scope decision above - it still demonstrates every other feature (a function-call default, a
+    class-constant default, a required-no-default prop) live.
 
 ### The editor side (`editor\vscode`)
 
 - **New `lib\propsBlock.js`**: the JS twin of `Props.php`'s grammar (comment/quote/bracket-depth-aware entry
   splitting, reusing `docblock.js`'s own `readType()`/`finish()` rather than re-deriving `kind`/`values`/
-  `deprecated` separately), producing props in the *exact* shape `docblock.js`'s `parseComponent()` already does -
+  `deprecated` separately), producing props in the _exact_ shape `docblock.js`'s `parseComponent()` already does -
   so `components.js`, `complete.js`, and every relevant class in `extension.js` need **zero** changes. Unlike the
   PHP compiler, the editor is deliberately lenient about an unsupported type name (shown as-is, not rejected) -
   informational, not enforcement, matching how a docblock's own `@var` type was never validated against a list
@@ -1548,15 +1589,16 @@ expression like `color={$dynamicColor}`) - no silent coercion either way, matchi
   (`storage.type.php`) rather than plain text. Without this, `@props{...}` previously rendered completely unstyled
   (no existing rule matched it at all).
 
-**A real, known gap found and left open, not fixed this round:** intelephense (the *PHP* language server, separate
+**A real, known gap found and left open, not fixed this round:** intelephense (the _PHP_ language server, separate
 from this grammar) now shows "undefined variable" for a prop used inside its own component's body, since `@props{}`
 isn't valid PHP syntax at all from its perspective - it has no way to know the compiled prelude declares those
 variables. Fixing this would need a document-level "shadow" virtual file kept in sync with every edit (the
-Vue/Svelte-tooling pattern for a *whole* embedded document, not the single-span virtual documents this project's
+Vue/Svelte-tooling pattern for a _whole_ embedded document, not the single-span virtual documents this project's
 existing hover/completion/definition bridges already use) - a meaningfully bigger undertaking than anything built so
 far this session, and out of scope for this round. Noted here so it isn't mistaken for an oversight later.
 
 **Verification performed:**
+
 - Standalone, end-to-end PHP checks against a real test component (both via a throwaway fixture and the real
   `btn.cast.php`/`btn-soft.cast.php`): all-defaults renders correctly; a definitely-missing required prop fails
   **compiling the caller** with the right file:line; a `{...$spread}` suppresses the check; a `<Slot name="x">`
@@ -1564,7 +1606,7 @@ far this session, and out of scope for this round. Noted here so it isn't mistak
   `@props{}` with a legacy `??=` for the same name is a hard compile error; a mistyped `@Props{}` is caught by the
   `Directives.php` backstop instead of leaking through as text.
 - Full 54-view-style regression re-run clean (the only two "failures" are a test-script artifact - calling
-  `render()` on a *component* file directly instead of `component()`, which is a misuse of the API this script
+  `render()` on a _component_ file directly instead of `component()`, which is a misuse of the API this script
   itself introduced by iterating indiscriminately, not a real regression - reconfirmed both components render
   correctly through the actual `component()` API used in practice).
 - Editor: `node --test "test/*.test.js"` - 141 tests, 139 pass (the same 2 pre-existing `tests/fixtures/components`
@@ -1607,7 +1649,7 @@ terminate line with ; not , comma of php consistancy." Four items, investigated 
    `package.json`'s `contributes` - only `grammars`/`snippets`, no `languages` key); bracket auto-closing/matching
    rides entirely on PHP's own built-in config, nothing this extension controls. The `directive-props` grammar
    rule was traced by hand against a real example and correctly balances nested braces - no highlighting bug
-   found. What *is* broken, confirmed by reading `lib\indent.js` directly: `@props` was entirely absent from the
+   found. What _is_ broken, confirmed by reading `lib\indent.js` directly: `@props` was entirely absent from the
    directive-recognition word-list, so its own `{`/`}` were never pushed onto the indent scanner's stack at all -
    scanned as plain HTML-mode content, no indent level opened. This is almost certainly what "brackets" and
    "indentation" both describe, so one fix addresses both.
@@ -1640,10 +1682,10 @@ Mirrors the file's own existing idiom for `@css(...)`/`@script(...)`/`@js(...)` 
   the consumed length through it, switch to block-scanning mode, and push a **new**, distinct stack-frame kind
   (`propsBlock`) - distinct from the generic `brace` kind already used for a nested brace inside a default (e.g.
   a closure), so the scanner can tell the outer `@props{`'s own closing `}` apart from a nested one.
-- `scanBlock()`'s `}` handling widened to also match `propsBlock`, and when the popped frame *was* the
+- `scanBlock()`'s `}` handling widened to also match `propsBlock`, and when the popped frame _was_ the
   `propsBlock` one specifically, switch back to HTML mode and return - the exact same pattern the file already
   uses for `call` + `)` (the `@css(...)`'s own closing paren switching back to HTML). Correctly balances nested
-  `{}`/`()` inside a prop default via the *existing* brace/paren tracking - only the outer frame is tagged
+  `{}`/`()` inside a prop default via the _existing_ brace/paren tracking - only the outer frame is tagged
   specially.
 - No `@endprops` needed - this is brace-delimited, not keyword-delimited like `@if…@endif`.
 - New test in `indent.test.js`: a multi-line `@props{...}` block (with a nested function-call default) asserts
@@ -1663,24 +1705,25 @@ present with a `-1` offset - `isset($m[1])` is the correct guard. Nothing else i
 **Merge + resolution** (`src\Compiler.php`, reusing what already existed rather than inventing parallel
 machinery): `declaredPropsOf()` (previously just "read a target file, scan it, cache it") now runs its result
 through a new `mergeExtendedProps(array $scan, string $ownerPath, string $ownerFile, string $ownerSource): array`
+
 - if `extends` is set, resolves the dotted path via the existing `resolve()` (the same dots→folders logic
-`componentTag()` already uses for `<Component>` tags), recurses into `declaredPropsOf()` for the base (so a
-multi-level chain resolves for free), and merges: the base's entries first in its own order, this file's own
-entries overriding/appending on top (a redeclared name keeps the base's position but the child's whole entry -
-type/default/required - replaces it, not a field-by-field merge). `extractOwnProps()` (the current file's own
-prelude builder) now goes through the same helper, so a component that both extends another *and* is itself
-compiled as the entry file sees the identical merged list a caller's required-prop check would see.
-Cycle detection: a new `private array $extendsChain` stack, pushed/popped around the recursive call - a repeated
-resolved path (or a direct self-extend) throws `circular @props extends:: chain involving "..."`, pointing at the
-*owner's own* `@props extends::` line (file + line computed from its own source, the same `TemplateError`
-convention `Props::scan()`'s other errors already use - not `Compiler::fail()`'s current-compile-position-based
-one, which would be pointing at an unrelated line in whatever file this `Compiler` instance happens to be
-mid-compiling when the cycle is discovered several resolution-levels deep). A missing base similarly throws
-`Component "X" (used in @props extends::) not found`, same convention.
-**Known, accepted gap** (same class already documented in Session 6 for the plain required-prop check): no
-cross-file cache-invalidation exists anywhere in this engine - confirmed nothing tracks "this compiled file
-depends on that file's mtime." If `Btn`'s props change, a cached `BtnSoft` compiled with `extends::Btns.Btn` won't
-recompile until `btn-soft.cast.php` itself is next touched or the cache is cleared.
+  `componentTag()` already uses for `<Component>` tags), recurses into `declaredPropsOf()` for the base (so a
+  multi-level chain resolves for free), and merges: the base's entries first in its own order, this file's own
+  entries overriding/appending on top (a redeclared name keeps the base's position but the child's whole entry -
+  type/default/required - replaces it, not a field-by-field merge). `extractOwnProps()` (the current file's own
+  prelude builder) now goes through the same helper, so a component that both extends another _and_ is itself
+  compiled as the entry file sees the identical merged list a caller's required-prop check would see.
+  Cycle detection: a new `private array $extendsChain` stack, pushed/popped around the recursive call - a repeated
+  resolved path (or a direct self-extend) throws `circular @props extends:: chain involving "..."`, pointing at the
+  _owner's own_ `@props extends::` line (file + line computed from its own source, the same `TemplateError`
+  convention `Props::scan()`'s other errors already use - not `Compiler::fail()`'s current-compile-position-based
+  one, which would be pointing at an unrelated line in whatever file this `Compiler` instance happens to be
+  mid-compiling when the cycle is discovered several resolution-levels deep). A missing base similarly throws
+  `Component "X" (used in @props extends::) not found`, same convention.
+  **Known, accepted gap** (same class already documented in Session 6 for the plain required-prop check): no
+  cross-file cache-invalidation exists anywhere in this engine - confirmed nothing tracks "this compiled file
+  depends on that file's mtime." If `Btn`'s props change, a cached `BtnSoft` compiled with `extends::Btns.Btn` won't
+  recompile until `btn-soft.cast.php` itself is next touched or the cache is cleared.
 
 **Editor side**: `lib\propsBlock.js`'s `parsePropsBlock()` gained the identical `extends::Path` detection
 (mirroring `Props.php`'s regex exactly), returned as `extends` alongside `props`. `docblock.js`'s
@@ -1697,7 +1740,7 @@ other direct `specOf()` call site (`extension.js`'s tag-completion list) both no
 **Grammar**: `directive-props`'s `begin` regex widened to optionally match `extends::Path` the same way `Props.php`
 did, with its own capture groups scoped as `extends` (same styled-keyword treatment as `props` itself), `::` (a
 new `punctuation.accessor.cast`), and the dotted path (`entity.name.tag.component.cast
-support.class.component.cast` - the *same* scope a real `<Btns.Button>` tag reference gets, since this is one
+support.class.component.cast` - the _same_ scope a real `<Btns.Button>` tag reference gets, since this is one
 too). The whole dotted path is one capture (one token at the tokenizer level, like a single `@word` directive
 argument), not split per `.`-segment the way a real tag reference's own dedicated rule splits it - confirmed via
 a real-tokenization grammar test, cosmetic only.
@@ -1710,12 +1753,13 @@ explicit override (it actually differs from `Btn`'s own `'primary'` default); ev
 duplicated.
 
 **Verification performed:**
+
 - A throwaway end-to-end PHP script (real `CastTemplate`/temp component files, not a unit-level fake): base
   renders with its own defaults; the extending component inherits `color`'s override and `margin`/`var10`/
   `version`, plus its own required `var11`; a missing base fails with "not found" naming the owner's own file:line;
   a genuine `A extends B, B extends A` cycle fails with "circular ... involving" naming the owner's own file:line,
   not an infinite loop or a stack overflow.
-- The *real* `btn.cast.php`/`btn-soft.cast.php` compiled and rendered through `CastTemplate` directly (not a
+- The _real_ `btn.cast.php`/`btn-soft.cast.php` compiled and rendered through `CastTemplate` directly (not a
   fixture): `Btn` with all defaults, `BtnSoft` with its override and required prop supplied, and `BtnSoft` with
   `var11` omitted correctly failing with "Missing required prop" at the component's own line 11.
 - `php -l` clean on every touched PHP file.
@@ -1729,9 +1773,9 @@ duplicated.
 - Found and fixed two bugs surfaced only by writing the tests, not by inspection: the first `extends::` merge test
   used a tag name without its folder prefix (`BtnSoft` instead of `Btns.BtnSoft`) - `lookup()` correctly returned
   nothing, which `diagnose()` then silently skipped, so the real signal was "my test typo'd the tag," not a code
-  bug. The second was real: a circular chain's *first* file (`CircA`) ended up inheriting its cycle-partner's
+  bug. The second was real: a circular chain's _first_ file (`CircA`) ended up inheriting its cycle-partner's
   (`CircB`'s) own, only-partially-resolved prop, rather than keeping purely its own - because `CircB`'s own failed
-  merge attempt still returned a *valid-looking*, cached spec (just not further-extended) that `CircA` then
+  merge attempt still returned a _valid-looking_, cached spec (just not further-extended) that `CircA` then
   legitimately merged against. Left as-is rather than chasing a stronger guarantee: a circular `extends::` chain
   is a compile-time error in the real engine regardless (`Compiler::mergeExtendedProps()` throws), so the editor
   side only has to not hang or crash, not reproduce the compiler's exact rejection point - the test was loosened
@@ -1766,7 +1810,7 @@ not a vague complaint, and it led straight to the cause rather than needing anot
 
 **Root cause, confirmed by tokenizing the real file directly:** `btn.cast.php`'s `@props{}` declares three
 nullable props (`?string $icon`, `?string $id`, `?string $className`). `php.tmLanguage.json` (VS Code's own PHP
-grammar, not this extension's) only recognizes `?Type` as a *nullable type hint* inside a real parameter list or
+grammar, not this extension's) only recognizes `?Type` as a _nullable type hint_ inside a real parameter list or
 return-type position - at this directive's own bare-statement level, it instead treats the leading `?` as the
 start of a **ternary** `?:` expression. That ternary rule is its own multi-line begin/end region; since no `:`
 ever follows, it never finds its own end and stays open indefinitely - silently swallowing `directive-props`'s own
@@ -1786,7 +1830,7 @@ every `@props{}` entry is written one per line (established convention throughou
 `?` always follows a condition expression earlier on the same line, never sits alone at the very start of one.
 
 **Verification:** reproduced first in isolation (a minimal `?string $b = null;` between two plain props, confirmed
-the same mis-scoping), then confirmed the fix against that exact reproduction *and* the real `btn.cast.php` file
+the same mis-scoping), then confirmed the fix against that exact reproduction _and_ the real `btn.cast.php` file
 directly (dumped every `{`/`}` token's scope before and after - before, everything from the real closing `}`
 onward, including the unrelated `if`/`elseif` chain's own braces, stayed inside `meta.directive.props.cast`; after,
 the directive closes exactly where it should and the rest of the file is back to plain PHP brace scoping). New

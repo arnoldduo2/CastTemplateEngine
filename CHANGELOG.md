@@ -2,7 +2,7 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
-## 3.0.0
+## 3.0.3
 
 - **LSP/extension precedence**: the VS Code extension now defers entirely to `cast-language-server` for
   hover, go-to-definition, completion, document links, and diagnostics-with-quick-fixes once the LSP
@@ -92,7 +92,6 @@ All notable changes are listed here. This project follows [Semantic Versioning](
   - `php cast lint <file> --json` (and `engine:check --json`): Outputs structured JSON diagnostics for LSP and AI agent automation.
   - `php cast engine:ast <file>` (alias `ast`): Machine-readable AST inspection displaying declared props, component invocations, echo holes, and scoped CSS classes.
   - `bin/gen-syntax-spec.php` & `editor/spec/cast-syntax.json`: Reflection-driven machine-readable syntax specification with automated drift tests.
-
 
 - **VS Code Extension Language Intelligence & Virtual Documents Bridge**:
   - Bridged `@css(...)`, `@script(...)`, `@js(...)`, and `@{ ... }` echo holes to VS Code's native PHP, JS, and CSS language providers via virtual documents (`cast-embedded:` URI scheme).

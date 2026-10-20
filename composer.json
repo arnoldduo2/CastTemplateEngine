@@ -1,13 +1,24 @@
 {
   "name": "anode/cast-template-engine",
-  "version": "3.0.0",
+  "version": "3.0.3",
   "description": "CastTemplateEngine: React-style components (tags, props, children, slots) on top of native PHP templates.",
   "type": "library",
   "license": "MIT",
-  "keywords": ["template", "templating", "components", "jsx", "php", "view", "cast"],
+  "keywords": [
+    "template",
+    "templating",
+    "components",
+    "jsx",
+    "php",
+    "view",
+    "cast"
+  ],
   "homepage": "https://github.com/arnoldduo2/CastTemplateEngine",
   "authors": [
-    { "name": "arnoldduo2", "email": "arnoldduo2@gmail.com" }
+    {
+      "name": "arnoldduo2",
+      "email": "arnoldduo2@gmail.com"
+    }
   ],
   "require": {
     "php": ">=8.1"
