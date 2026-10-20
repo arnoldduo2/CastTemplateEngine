@@ -10,6 +10,7 @@ const State = { Stopped: 1, Starting: 2, Running: 3 };
 /** One fake client module per test project, so `fire` only ever affects that project's own client. */
 function create() {
   const listeners = [];
+  const instances = [];
 
   class LanguageClient {
     constructor(id, name, serverOptions, clientOptions) {
@@ -17,6 +18,7 @@ function create() {
       this.name = name;
       this.serverOptions = serverOptions;
       this.clientOptions = clientOptions;
+      instances.push(this);
     }
     start() {
       return Promise.resolve();
@@ -36,7 +38,7 @@ function create() {
     listeners.slice().forEach((l) => l({ oldState: State.Starting, newState }));
   }
 
-  return { LanguageClient, State, fire };
+  return { LanguageClient, State, fire, instances };
 }
 
 module.exports = { create, State };

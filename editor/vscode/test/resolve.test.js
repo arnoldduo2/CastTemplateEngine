@@ -2,7 +2,31 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const Module = require("node:module");
 const { variants, resolveComponent, resolveLegacyComponent, resolveView, resolveModule, propsOf } = require("../lib/resolve");
+
+test("lib/resolve degrades to safe stand-ins (never throws) when cast-language-core fails to load", () => {
+  const original = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "cast-language-core") throw new Error("simulated: npm install never ran");
+    return original.call(this, request, ...rest);
+  };
+  delete require.cache[require.resolve("../lib/resolve")];
+  let degraded;
+  try {
+    degraded = require("../lib/resolve");
+  } finally {
+    Module._load = original;
+    delete require.cache[require.resolve("../lib/resolve")];
+  }
+
+  assert.deepEqual(degraded.resolveComponent("Card", ["/x"]), { file: null, tried: [] });
+  assert.deepEqual(degraded.resolveLegacyComponent("x", ["/x"]), { file: null, tried: [] });
+  assert.deepEqual(degraded.resolveView("x", "/x"), { file: null, tried: [] });
+  assert.deepEqual(degraded.resolveModule("x", "js", "/x"), { file: null, tried: [] });
+  assert.deepEqual(degraded.propsOf("<?php"), []);
+  assert.deepEqual(degraded.variants("Card"), ["Card"]);
+});
 
 /** A fake file system: a set of file paths; folders are implied. */
 function fakeFs(...files) {

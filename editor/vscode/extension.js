@@ -44,6 +44,17 @@ function isLspReady() {
   return lspReady;
 }
 
+/** config/view.php: 'components' => 'ui' (relative to the views folder) - null when there is no such override. */
+function componentsOverride(root, viewsDir) {
+  try {
+    const source = fs.readFileSync(path.join(root, "config", "view.php"), "utf8");
+    const m = /['"]components['"]\s*=>\s*['"]([^'"]+)['"]/.exec(source);
+    return m ? path.resolve(viewsDir, m[1]) : null;
+  } catch {
+    return null; // no config/view.php
+  }
+}
+
 /** The folders to search for a document: from the settings, and from config/view.php when it names a components folder. */
 function locations(document) {
   const folder = vscode.workspace.getWorkspaceFolder(document.uri);
@@ -57,17 +68,9 @@ function locations(document) {
   const configured = [].concat(config.get("componentsPath", "resources/views/components"));
   const dirs = configured.map((p) => path.resolve(root, p));
 
-  // config/view.php: 'components' => 'ui'  (relative to the views folder)
-  try {
-    const source = fs.readFileSync(path.join(root, "config", "view.php"), "utf8");
-    const m = /['"]components['"]\s*=>\s*['"]([^'"]+)['"]/.exec(source);
-    if (m) {
-      const dir = path.resolve(viewsDir, m[1]);
-      if (!dirs.includes(dir)) dirs.unshift(dir);
-    }
-  } catch {
-    /* no config/view.php */
-  }
+  const override = componentsOverride(root, viewsDir);
+  if (override && !dirs.includes(override)) dirs.unshift(override);
+
   return { root, viewsDir, resourcesDir, componentDirs: dirs, ext };
 }
 
@@ -120,8 +123,15 @@ class Definitions {
 }
 
 // Shared with the LSP (editor/server/src/features/hover.ts) via cast-language-core, so the two never disagree
-// on this text - see docs/superpowers/specs/2026-10-17-cast-lsp-precedence-design.md.
-const { BUILTIN_HOVERS, ECHO_HOLE_HOVER, CHAIN_HOVER } = require("cast-language-core");
+// on this text - see docs/superpowers/specs/2026-10-17-cast-lsp-precedence-design.md. Guarded the same way
+// lib/docblock.js's require is (see that file's comment): on failure, these three hover tables are simply empty
+// - a handful of hover entries are lost, not the whole extension.
+let BUILTIN_HOVERS = {}, ECHO_HOLE_HOVER = "", CHAIN_HOVER = {}, coreSpell = null;
+try {
+  ({ BUILTIN_HOVERS, ECHO_HOLE_HOVER, CHAIN_HOVER, spell: coreSpell } = require("cast-language-core"));
+} catch {
+  /* cast-language-core not installed: BUILTIN_HOVERS/ECHO_HOLE_HOVER/CHAIN_HOVER stay empty, spell falls back below */
+}
 
 /**
  * `@htchars`/`@route`/`@cast`/`@csrf`/`@alerts`/`@modules` (FUNCTION_DIRECTIVES, see lib/embedded.js) don't get a
@@ -558,8 +568,12 @@ class FunctionDirectiveHovers {
 
 // ------------------------------------------------------------------ component docs
 
-/** The prop name as it is written in a tag, in the style of the `cast.propCase` setting. */
+/** The prop name as it is written in a tag, in the style of the `cast.propCase` setting. Shared with the LSP
+ * (editor/server's own CompletionProvider) via cast-language-core, so the two never disagree on a spelling -
+ * falls back to a vendored copy (identical today; see lib/docblock.js's own facade comment on why a guarded
+ * require degrades instead of crashing) when cast-language-core isn't installed. */
 function spell(name, style) {
+  if (coreSpell) return coreSpell(name, style);
   const words = name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().split(/[\s_-]+/);
   if (style === "kebab") return words.join("-");
   if (style === "snake") return words.join("_");
@@ -941,12 +955,26 @@ function showOnce(context, key, message) {
  * The cast.* settings the LSP needs, in the shape editor/server/src/settings.ts's CastSettings/resolveSettings
  * expects - same defaults as locations()/the rest of this file already use, so the LSP and the extension's own
  * engine never disagree about where components/views/resources live or how diagnostics/propCase behave.
+ *
+ * `root` (the first workspace folder, when there is one) lets a config/view.php `'components' => '...'` override
+ * reach the LSP too, the same way locations() folds it in per-document for this extension's own fallback engine -
+ * otherwise the LSP would index under the default folder/tag and silently miss every component in a project using
+ * that override once this extension's own engine is gated off.
  */
-function castSettings(config) {
+function castSettings(config, root) {
+  const componentsPath = [].concat(config.get("componentsPath", "resources/views/components"));
+  const viewsPath = config.get("viewsPath", "resources/views");
+  if (root) {
+    const override = componentsOverride(root, path.resolve(root, viewsPath));
+    if (override) {
+      const rel = path.relative(root, override);
+      if (!componentsPath.includes(rel)) componentsPath.unshift(rel);
+    }
+  }
   return {
     propCase: config.get("propCase", "camel"),
-    componentsPath: [].concat(config.get("componentsPath", "resources/views/components")),
-    viewsPath: config.get("viewsPath", "resources/views"),
+    componentsPath,
+    viewsPath,
     resourcesPath: config.get("resourcesPath", "resources"),
     extension: config.get("extension", ".cast.php"),
     diagnostics: config.get("diagnostics", "hint"),
@@ -991,10 +1019,11 @@ function startLanguageClient(context) {
   // cast.* settings travel to the LSP as initializationOptions at startup, and again over
   // workspace/didChangeConfiguration whenever they change (synchronize.configurationSection) - see
   // editor/server/src/settings.ts's CastSettings/resolveSettings, which this shape must match.
+  const root = (vscode.workspace.workspaceFolders || [])[0];
   const clientOptions = {
     documentSelector: [SELECTOR],
     synchronize: { configurationSection: "cast" },
-    initializationOptions: castSettings(config),
+    initializationOptions: castSettings(config, root && root.uri.fsPath),
   };
 
   client = new LanguageClient("castLanguageServer", "Cast Language Server", serverOptions, clientOptions);
@@ -1089,6 +1118,16 @@ function activate(context) {
       vscode.workspace.onDidChangeConfiguration(() => (vscode.workspace.textDocuments || []).forEach(refresh))
     );
     (vscode.workspace.textDocuments || []).forEach(refresh);
+  }
+
+  // Without this, a document already open when the LSP finishes its handshake (or stops) keeps whichever set of
+  // diagnostics it last had until the user's next edit - both this extension's own and the LSP's sitting in the
+  // Problems panel at once, the exact duplication the precedence design exists to remove. publishDiagnostics/
+  // EmbeddedDiagnostics.refresh both already check lspReady fresh (see Hovers/Definitions/etc.'s own gating), so
+  // simply re-running refresh() for every open document on every transition (in both directions) is enough: ready
+  // clears this extension's diagnostics, not-ready-anymore recomputes them.
+  if (client && client.onDidChangeState) {
+    context.subscriptions.push(client.onDidChangeState(() => (vscode.workspace.textDocuments || []).forEach(refresh)));
   }
 }
 

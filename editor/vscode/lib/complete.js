@@ -7,87 +7,22 @@ const { camel } = require("./docblock");
 const { findProp } = require("./components");
 const { parsePropsBlock } = require("./propsBlock");
 
-/** The component tags (opening ones) whose attributes are being typed: refs from the scanner plus the stack for slots. */
-function openTags(refs) {
-  return refs.filter((r) => !r.closing);
-}
-
-/** The component that contains a `<Slot>`: the nearest enclosing opened (not self-closed) component. */
-function parentOf(refs, slot) {
-  const stack = [];
-  for (const r of refs) {
-    if (r === slot) return stack[stack.length - 1] || null;
-    if (r.name === "Slot") continue;
-    if (r.closing) {
-      for (let i = stack.length - 1; i >= 0; i--) if (stack[i].name === r.name) { stack.length = i; break; }
-    } else if (!r.selfClosing && r.tagEnd !== null) {
-      stack.push(r);
-    }
-  }
-  return null;
-}
-
 /**
- * What is being typed at `offset`:
- *  {type: 'tag', prefix, start, end}                                  after `<` and the first letters of a component name
- *  {type: 'attribute', ref, prefix, start, end, used}                 a prop name inside an open component tag
- *  {type: 'value', ref, attr, prefix, start, end, quoted}             the value of a prop (inside quotes, or right after `=`)
- *  {type: 'slot', ref, parent, prefix, start, end}                    the name of a `<Slot name="...">`
+ * contextAt/parentOf ("what is being typed at this offset": a tag name, an attribute name, an attribute value, or
+ * a <Slot name="...">) are a compatibility facade over cast-language-core now - ported there for Task 8 of the
+ * Cast LSP Precedence plan (editor/language-core/src/completionContext.ts), so the LSP's CompletionProvider shares
+ * the exact scan instead of a second, independently-drifted copy. Guarded the same way lib/docblock.js's require
+ * is (see that file's comment): on failure, contextAt simply finds nothing (no completions), rather than taking
+ * the whole extension down.
  */
-function contextAt(src, offset) {
-  // 1) typing a tag name
-  const before = src.slice(Math.max(0, offset - 80), offset);
-  const tag = /<([A-Z][A-Za-z0-9_.]*)?$/.exec(before);
-  if (tag && !/^\s*\?/.test(src.slice(offset - before.length + tag.index + 1, offset - before.length + tag.index + 2))) {
-    const prefix = tag[1] || "";
-    const afterName = /^[A-Za-z0-9_.]*/.exec(src.slice(offset))[0];
-    const lt = offset - prefix.length - 1;
-    // not inside <?php ... ?> code or an HTML comment
-    const lastOpen = src.lastIndexOf("<?", lt);
-    const lastClose = src.lastIndexOf("?>", lt);
-    const comment = src.lastIndexOf("<!--", lt) > src.lastIndexOf("-->", lt);
-    if (!(lastOpen > lastClose) && !comment) return { type: "tag", prefix, start: offset - prefix.length, end: offset + afterName.length };
-  }
-
-  // 2) inside an open component tag
-  const refs = scanComponents(src);
-  const ref = openTags(refs).find((r) => offset > r.end && offset > r.tagStart && (r.tagEnd === null ? lineEndsOrNoMoreTags(src, r, offset) : offset < r.tagEnd));
-  if (!ref) return null;
-
-  for (const attr of ref.attrs) {
-    if (attr.valueType === "string" && attr.valueStart <= offset && (attr.valueEnd === null || offset <= attr.valueEnd)) {
-      const prefix = src.slice(attr.valueStart, offset);
-      if (ref.name === "Slot" && camel(attr.name) === "name") {
-        const parent = parentOf(refs, ref);
-        return { type: "slot", ref, parent, attr, prefix, start: attr.valueStart, end: attr.valueEnd ?? offset };
-      }
-      return { type: "value", ref, attr, prefix, start: attr.valueStart, end: attr.valueEnd ?? offset, quoted: true };
-    }
-    if (attr.valueType === null && attr.equals !== null && offset > attr.equals) {
-      return { type: "value", ref, attr, prefix: "", start: offset, end: offset, quoted: false };
-    }
-    if (attr.valueType === null && attr.nameStart <= offset && offset <= attr.nameEnd) {
-      return { type: "attribute", ref, prefix: src.slice(attr.nameStart, offset), start: attr.nameStart, end: attr.nameEnd, used: usedNames(ref, attr) };
-    }
-    if (attr.valueType !== null && attr.valueType !== "spread" && attr.valueStart !== null && offset >= attr.nameStart && offset <= attr.nameEnd) {
-      return { type: "attribute", ref, prefix: src.slice(attr.nameStart, offset), start: attr.nameStart, end: attr.nameEnd, used: usedNames(ref, attr) };
-    }
-    // inside { } of a brace value or spread: no suggestions
-    if ((attr.valueType === "brace" || attr.valueType === "spread") && attr.valueStart <= offset && (attr.valueEnd === null || offset <= attr.valueEnd)) return null;
-  }
-  return { type: "attribute", ref, prefix: "", start: offset, end: offset, used: usedNames(ref, null) };
+let core;
+try {
+  core = require("cast-language-core");
+} catch {
+  core = null;
 }
-
-/** A tag with no `>` yet: only treat the cursor as inside it when no other tag starts between the name and the cursor. */
-function lineEndsOrNoMoreTags(src, ref, offset) {
-  return !/[<>]/.test(src.slice(ref.end, offset));
-}
-
-function usedNames(ref, except) {
-  const used = new Set();
-  for (const a of ref.attrs) if (a.name && a !== except) used.add(camel(a.name));
-  return used;
-}
+const contextAt = core ? core.contextAt : () => null;
+const parentOf = core ? core.parentOf : () => null;
 
 /**
  * Problems in the opening tags of documented components.

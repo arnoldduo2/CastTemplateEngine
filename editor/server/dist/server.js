@@ -50,6 +50,7 @@ connection.onInitialize(async (params) => {
         roots.push(vscode_uri_1.URI.parse(params.rootUri).fsPath);
     }
     projectIndex.setWorkspaceRoots(roots);
+    projectIndex.setSettings(settings);
     await projectIndex.indexAll();
     // Check PHP runtime
     const engineStatus = phpEngineManager.resolve();
@@ -130,6 +131,7 @@ connection.onDidChangeConfiguration(async () => {
     const raw = await connection.workspace.getConfiguration('cast');
     settings = (0, settings_js_1.resolveSettings)(raw);
     completionProvider.setSettings(settings);
+    projectIndex.setSettings(settings);
     await projectIndex.indexAll();
     for (const document of documents.all()) {
         await validateDocument(document);

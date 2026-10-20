@@ -19,7 +19,7 @@ function nonComponentReferences(doc, projectIndex) {
         const resolved = ref.kind === 'view' ? projectIndex.resolveView(ref.name)
             : ref.kind === 'legacy-component' ? projectIndex.resolveLegacyComponent(ref.name)
                 : projectIndex.resolveModule(ref.name, ref.type === 'css' ? 'css' : 'js');
-        return { kind: ref.kind, range: rangeAt(doc.text, ref.start, ref.end), file: resolved.file };
+        return { kind: ref.kind, range: rangeAt(doc.text, ref.start, ref.end), file: resolved.file, tried: resolved.tried };
     });
 }
 //# sourceMappingURL=references.js.map

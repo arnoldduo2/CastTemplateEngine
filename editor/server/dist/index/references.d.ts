@@ -5,6 +5,7 @@ export interface NonComponentReference {
     kind: 'legacy-component' | 'view' | 'module';
     range: Range;
     file: string | null;
+    tried: string[];
 }
 /**
  * Legacy `Component('btns.add-new')`/`__includes('layouts.header')`/`__modules('app', 'css')` references, resolved

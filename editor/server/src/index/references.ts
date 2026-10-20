@@ -7,6 +7,7 @@ export interface NonComponentReference {
   kind: 'legacy-component' | 'view' | 'module';
   range: Range;
   file: string | null;
+  tried: string[];
 }
 
 function positionAt(text: string, offset: number): Position {
@@ -29,6 +30,6 @@ export function nonComponentReferences(doc: CastDocument, projectIndex: ProjectI
       ref.kind === 'view' ? projectIndex.resolveView(ref.name)
       : ref.kind === 'legacy-component' ? projectIndex.resolveLegacyComponent(ref.name)
       : projectIndex.resolveModule(ref.name, ref.type === 'css' ? 'css' : 'js');
-    return { kind: ref.kind, range: rangeAt(doc.text, ref.start, ref.end), file: resolved.file };
+    return { kind: ref.kind, range: rangeAt(doc.text, ref.start, ref.end), file: resolved.file, tried: resolved.tried };
   });
 }

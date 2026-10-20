@@ -39,6 +39,7 @@ exports.resolveComponent = resolveComponent;
 exports.resolveLegacyComponent = resolveLegacyComponent;
 exports.resolveView = resolveView;
 exports.resolveModule = resolveModule;
+exports.propDeclarationOffset = propDeclarationOffset;
 exports.propsOf = propsOf;
 /**
  * Maps names used in views to files, with exactly the engine's rules (CastTemplateEngine\Compiler::resolve):
@@ -115,6 +116,19 @@ function resolveModule(name, type, resourcesDir, fs = exports.realFs) {
 function firstFile(candidates, fs) {
     const file = candidates.find((c) => fs.isFile(c)) || null;
     return { file, tried: candidates };
+}
+/** The offset of a prop's own declaration in a component file's text - a docblock `@var`/`@param`/`@prop`/
+ * `@property` tag naming it, or its legacy `$name ??= default` line - whichever comes first. `null` when neither
+ * is present (e.g. the prop only exists via `@props{}`, which the caller tracks a real range for separately -
+ * see editor/server/src/index/projectIndex.ts's own comment on why CastParser stays in use for that one piece).
+ * Ported from editor/vscode/extension.js's PropDefinitions (Ctrl+click on a prop name), so definition.ts can share
+ * the exact same "where is this declared" lookup for docblock/`??=` props instead of only ever finding one for a
+ * `@props{}` entry's own tracked range. */
+function propDeclarationOffset(source, name) {
+    const clean = name.replace(/[$]/g, '');
+    const re = new RegExp(`@(?:var|param|prop|property)[^\\n]*\\$${clean}\\b|\\$${clean}\\s*\\?\\?=`);
+    const m = re.exec(source);
+    return m ? m.index : null;
 }
 /** Prop names a component file reads: `$title ??= ...`, `@var ... $title`, `@param ... $title` (best effort, for the hover). */
 function propsOf(source) {

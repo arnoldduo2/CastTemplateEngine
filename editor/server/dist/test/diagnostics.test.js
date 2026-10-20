@@ -41,6 +41,7 @@ const node_test_1 = __importDefault(require("node:test"));
 const fs = __importStar(require("node:fs"));
 const os = __importStar(require("node:os"));
 const path = __importStar(require("node:path"));
+const vscode_languageserver_1 = require("vscode-languageserver");
 const castParser_js_1 = require("../parser/castParser.js");
 const projectIndex_js_1 = require("../index/projectIndex.js");
 const diagnostics_js_1 = require("../diagnostics/diagnostics.js");
@@ -77,6 +78,46 @@ const DEPRECATED_CARD = `<?php
  * @var string $title The card's heading
  */
 `;
+const CARD_WITH_CAMEL_PROP = `<?php
+/**
+ * Card component
+ * @var string $title The card's heading
+ * @var string $iconName The icon to show, required
+ */
+`;
+/** No docblock @var/@param tags at all - every prop comes only from a ??= default (inferred: true), the most
+ * common shape in an older/legacy project. */
+const LEGACY_ONLY_TOOLTIP = `<?php
+$text ??= 'Tip';
+$position ??= 'top';
+`;
+(0, node_test_1.default)('a required prop written in kebab-case still satisfies the camelCase-documented prop (no false missing-prop)', () => {
+    const { manager, doc } = setup(CARD_WITH_CAMEL_PROP, '<Card title="x" icon-name="bell" />');
+    const diagnostics = manager.getFastDiagnostics(doc, settings_js_1.DEFAULT_SETTINGS);
+    strict_1.default.equal(diagnostics.find((d) => d.code === 'missing-prop'), undefined, 'icon-name already satisfies iconName');
+});
+(0, node_test_1.default)('a spread attribute ({...$props}) suppresses missing-prop entirely - it could be providing anything', () => {
+    const { manager, doc } = setup(CARD_WITH_CAMEL_PROP, '<Card {...$props} />');
+    const diagnostics = manager.getFastDiagnostics(doc, settings_js_1.DEFAULT_SETTINGS);
+    strict_1.default.equal(diagnostics.find((d) => d.code === 'missing-prop'), undefined);
+});
+(0, node_test_1.default)('a required prop provided by a call-site <Slot name="..."> child (not a documented @slot tag) satisfies missing-prop', () => {
+    const { manager, doc } = setup(CARD, '<Card variant="primary"><Slot name="title">Hi</Slot></Card>');
+    const diagnostics = manager.getFastDiagnostics(doc, settings_js_1.DEFAULT_SETTINGS);
+    strict_1.default.equal(diagnostics.find((d) => d.code === 'missing-prop' && d.message.includes("'title'")), undefined);
+});
+(0, node_test_1.default)('an undocumented (legacy ??=-only) component is never flagged for an unknown attribute', () => {
+    const { manager, doc } = setup(LEGACY_ONLY_TOOLTIP, '<Tooltip text="x" classX="mt-2" />');
+    const diagnostics = manager.getFastDiagnostics(doc, settings_js_1.DEFAULT_SETTINGS);
+    strict_1.default.deepEqual(diagnostics, [], 'nothing documented means nothing to be wrong about');
+});
+(0, node_test_1.default)('missing-prop severity follows cast.diagnostics (Hint by default, Warning under "warning"), not a fixed Error', () => {
+    const { manager, doc } = setup(CARD, '<Card />');
+    const hint = manager.getFastDiagnostics(doc, settings_js_1.DEFAULT_SETTINGS).find((d) => d.code === 'missing-prop');
+    strict_1.default.equal(hint.severity, vscode_languageserver_1.DiagnosticSeverity.Hint);
+    const warning = manager.getFastDiagnostics(doc, { ...settings_js_1.DEFAULT_SETTINGS, diagnostics: 'warning' }).find((d) => d.code === 'missing-prop');
+    strict_1.default.equal(warning.severity, vscode_languageserver_1.DiagnosticSeverity.Warning);
+});
 (0, node_test_1.default)('diagnostics: "off" silences every LSP-computed diagnostic, not just parser errors', () => {
     const { manager, doc } = setup(CARD, '<Card />');
     const diagnostics = manager.getFastDiagnostics(doc, { ...settings_js_1.DEFAULT_SETTINGS, diagnostics: 'off' });

@@ -1,7 +1,31 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const Module = require("node:module");
 const { scanComponents, scanHelpers, scanChainCalls } = require("../lib/scan");
+
+test("lib/scan's exports all degrade to empty results (never throws) when cast-language-core fails to load", () => {
+  const original = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "cast-language-core") throw new Error("simulated: npm install never ran");
+    return original.call(this, request, ...rest);
+  };
+  delete require.cache[require.resolve("../lib/scan")];
+  let degraded;
+  try {
+    degraded = require("../lib/scan");
+  } finally {
+    Module._load = original;
+    delete require.cache[require.resolve("../lib/scan")];
+  }
+
+  assert.deepEqual(degraded.scanHelpers("<?php __includes('x.y'); ?>"), []);
+  assert.deepEqual(degraded.scanChainCalls("@$items.filter(() => true)"), []);
+  // scanComponents moved into cast-language-core too (Task 8's completionContext.ts) - no component tags found
+  // degrades the same way everything else here does, rather than silently losing Ctrl+click/hover/links/
+  // completions on every component tag with no explanation.
+  assert.deepEqual(degraded.scanComponents("<Card />"), []);
+});
 
 const names = (src) => scanComponents(src).map((c) => (c.closing ? "/" : "") + c.name);
 const at = (src, ref) => src.slice(ref.start, ref.end);

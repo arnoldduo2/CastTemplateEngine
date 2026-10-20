@@ -69,6 +69,12 @@ class ProjectIndex {
     componentDirs() {
         return this.workspaceRoots.flatMap((root) => this.settings.componentsPath.map((p) => path.join(root, p)));
     }
+    /** A `<Tag>` component's candidate paths, same componentsPath settings as the in-memory index itself - used
+     * only for the "tried these paths" hover on a tag that isn't (or isn't yet) indexed; getComponent() is still
+     * the fast, authoritative lookup for a tag the index already has. */
+    resolveComponentTag(tag) {
+        return (0, cast_language_core_1.resolveComponent)(tag, this.componentDirs(), this.settings.extension);
+    }
     /** `Component('btns.add-new')` - resolved against the same componentsPath settings as component tags. */
     resolveLegacyComponent(name) {
         return (0, cast_language_core_1.resolveLegacyComponent)(name, this.componentDirs(), this.settings.extension);
@@ -99,8 +105,12 @@ class ProjectIndex {
     async scanDirectory(root) {
         if (!fs.existsSync(root))
             return;
-        // Scan standard component folders
+        // cast.componentsPath (settings.ts) first, so a project with a custom folder (or config/view.php's
+        // `'components' => '...'` override, which the extension forwards as part of componentsPath - see
+        // editor/vscode/extension.js's castSettings) gets its components indexed under the right tag/baseDir, not
+        // only (or wrongly, via a fallback entry below with the wrong baseDir) picked up by coincidence.
         const potentialDirs = [
+            ...this.settings.componentsPath.map((p) => path.join(root, p)),
             path.join(root, 'resources/views/components'),
             path.join(root, 'resources/views'),
             path.join(root, 'src/resources/views/components'),
@@ -110,7 +120,7 @@ class ProjectIndex {
             path.join(root, 'starter/resources/views/components'),
             path.join(root, 'starter/resources/views'),
         ];
-        for (const dir of potentialDirs) {
+        for (const dir of new Set(potentialDirs)) {
             if (fs.existsSync(dir)) {
                 const isFramework = dir.includes('starter') || dir.includes('vendor');
                 await this.scanRecursive(dir, dir, isFramework);

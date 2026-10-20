@@ -212,6 +212,10 @@ function create({ root, settings = {} }) {
       onDidChangeTextDocument: (fn) => ((handlers.change = fn), { dispose() {} }),
       applyEdit: async (edit) => (applied.push(edit), true),
       getWorkspaceFolder: () => (root ? { uri: Uri.file(root) } : undefined),
+      workspaceFolders: root ? [{ uri: Uri.file(root) }] : undefined,
+      // Mutable: a test pushes TextDocuments (from the `document()` helper below) onto this array directly to
+      // simulate "currently open" files - e.g. for exercising a refresh-all-open-documents code path.
+      textDocuments: [],
       getConfiguration: () => ({ get: (key, fallback) => (key in settings ? settings[key] : fallback) }),
       registerTextDocumentContentProvider: () => ({ dispose() {} }),
       openTextDocument: async (uri) => ({ uri, languageId: "plaintext" }),

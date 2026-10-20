@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as path from 'node:path';
-import { variants, resolveComponent, resolveLegacyComponent, resolveView, resolveModule, propsOf, FsLike } from '../index.js';
+import { variants, resolveComponent, resolveLegacyComponent, resolveView, resolveModule, propsOf, propDeclarationOffset, FsLike } from '../index.js';
 
 /** A fake file system: a set of file paths; folders are implied. */
 function fakeFs(...files: string[]): FsLike {
@@ -90,4 +90,11 @@ $type ??= 'text';
 echo $children; $data['x'];
 $this->x ??= 1;`;
   assert.deepEqual(propsOf(source).sort(), ['hasLabel', 'label', 'title', 'type']);
+});
+
+test('propDeclarationOffset finds a docblock @var/@param tag or a legacy ??= line, and null when neither exists', () => {
+  const source = `<?php\n/** @var string $title the heading */\n$label ??= 'Input';\n`;
+  assert.equal(propDeclarationOffset(source, 'title'), source.indexOf('@var'));
+  assert.equal(propDeclarationOffset(source, 'label'), source.indexOf('$label'));
+  assert.equal(propDeclarationOffset(source, 'missing'), null);
 });

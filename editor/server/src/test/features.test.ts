@@ -118,12 +118,49 @@ describe('Language Server Features', () => {
     assert.match(md, /fluent chain/);
   });
 
+  test('hover on an unresolved component tag says what was looked for, same as the extension\'s own generic reference hover', () => {
+    const { index: rooted } = referenceFixture();
+    const hoverProvider = new HoverProvider(rooted);
+    const doc = parser.parse('file:///view.cast.php', '<Missing.Thing />');
+    const hover = hoverProvider.getHover(doc, positionOfWord(doc.text, 'Missing.Thing'))!;
+    assert.ok(hover, 'should return a hover for the unresolved tag');
+    const md = typeof hover.contents === 'object' && 'value' in hover.contents ? hover.contents.value : '';
+    assert.match(md, /No file found\. Looked for:/);
+  });
+
+  test('hover on a legacy Component() reference resolves and lists the target file\'s props', () => {
+    const { index: rooted } = referenceFixture();
+    const hoverProvider = new HoverProvider(rooted);
+    const doc = parser.parse('file:///view.cast.php', "<?= Component('btns.add-new') ?>");
+    const hover = hoverProvider.getHover(doc, positionOfWord(doc.text, 'btns.add-new'))!;
+    assert.ok(hover, 'should return a hover for the resolved legacy reference');
+    const md = typeof hover.contents === 'object' && 'value' in hover.contents ? hover.contents.value : '';
+    assert.match(md, /\*\*Component \(legacy\)\*\* `btns\.add-new`/);
+    assert.match(md, /Ctrl\+click to open\./);
+  });
+
   test('go-to-definition on a component attribute jumps to its declaration line, not the component file start', () => {
     const { index: rooted } = referenceFixture();
     const definitionProvider = new DefinitionProvider(rooted);
     const doc = parser.parse('file:///view.cast.php', '<Button variant="primary" />');
     const def = definitionProvider.getDefinition(doc, positionOfWord(doc.text, 'variant'))!;
     assert.notDeepEqual((def as Location).range, Range.create(0, 0, 0, 0));
+  });
+
+  test('go-to-definition on a docblock/??=-declared prop (no @props{} entry, so no tracked range) still jumps to its declaration line', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cast-features-docblock-prop-'));
+    const componentsDir = path.join(root, 'resources/views/components');
+    fs.mkdirSync(componentsDir, { recursive: true });
+    const source = `<?php\n/**\n * Button component\n * @var string $variant Visual style\n */\n$variant ??= 'primary';\n`;
+    fs.writeFileSync(path.join(componentsDir, 'Button.cast.php'), source);
+    const index = new ProjectIndex([root]);
+    index.indexFile(componentsDir, path.join(componentsDir, 'Button.cast.php'), false);
+
+    const definitionProvider = new DefinitionProvider(index);
+    const doc = parser.parse('file:///view.cast.php', '<Button variant="primary" />');
+    const def = definitionProvider.getDefinition(doc, positionOfWord(doc.text, 'variant')) as Location;
+    assert.ok(def, 'should still find a definition for a docblock-declared prop');
+    assert.equal(def.range.start.line, source.split('\n').findIndex((l) => l.includes('@var')));
   });
 
   test('go-to-definition resolves a legacy Component() call', () => {
@@ -171,6 +208,28 @@ describe('Language Server Features', () => {
     const item = items.find(i => i.label === 'has-label')!;
     assert.ok(item, 'should offer the bool prop spelled as kebab-case');
     assert.match((item.textEdit as TextEdit).newText, /^has-label$/); // bool prop: no value placeholder
+  });
+
+  test('tag completion snippets a required non-string prop as an expression placeholder, not a quoted string literal', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cast-features-completion-kind-'));
+    const componentsDir = path.join(root, 'resources/views/components');
+    fs.mkdirSync(componentsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(componentsDir, 'Items.cast.php'),
+      `<?php\n/**\n * Items component\n * @var array $items The list, required\n */\n`
+    );
+    const index = new ProjectIndex([root]);
+    index.indexFile(componentsDir, path.join(componentsDir, 'Items.cast.php'), false);
+
+    const provider = new CompletionProvider(index);
+    const text = '<Item';
+    const doc = parser.parse('file:///view.cast.php', text);
+    const items = provider.getCompletions(doc, { line: 0, character: text.length });
+    const item = items.find((i) => i.label === 'Items')!;
+    assert.ok(item, 'should offer the Items component tag');
+    const newText = (item.textEdit as TextEdit).newText;
+    assert.match(newText, /items=\{\$\{1:items\}\}/, 'a required array prop must use a {expression} placeholder, not a quoted string');
+    assert.doesNotMatch(newText, /items="/);
   });
 
   test("value completion inside an attribute offers the prop's declared enum values", () => {

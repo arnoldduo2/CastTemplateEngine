@@ -68,8 +68,21 @@ $variant ??= 'primary';
 (0, node_test_1.default)('ProjectIndex.resolveLegacyComponent/resolveView/resolveModule resolve against the configured settings', () => {
     const root = fixtureRoot();
     const index = new projectIndex_js_1.ProjectIndex([root]);
-    index.setSettings((0, settings_js_1.resolveSettings)({ componentsPath: ['resources/views/components'] }));
+    // A non-default componentsPath, so this only passes if setSettings actually took effect - the default value
+    // would resolve the same component dir either way and prove nothing.
+    fs.mkdirSync(path.join(root, 'ui/btns'), { recursive: true });
+    fs.renameSync(path.join(root, 'resources/views/components/btns/add-new.cast.php'), path.join(root, 'ui/btns/add-new.cast.php'));
+    index.setSettings((0, settings_js_1.resolveSettings)({ componentsPath: ['ui'] }));
     const { file } = index.resolveLegacyComponent('btns.add-new');
-    strict_1.default.ok(file && file.endsWith('add-new.cast.php'));
+    strict_1.default.ok(file && file.endsWith(path.join('ui', 'btns', 'add-new.cast.php')));
+});
+(0, node_test_1.default)('indexAll scans cast.componentsPath, not just the hardcoded resources/views/components default', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cast-project-index-custom-'));
+    fs.mkdirSync(path.join(root, 'ui-components'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'ui-components/card.cast.php'), '<?php /** Card component */ ?>');
+    const index = new projectIndex_js_1.ProjectIndex([root]);
+    index.setSettings((0, settings_js_1.resolveSettings)({ componentsPath: ['ui-components'] }));
+    await index.indexAll();
+    strict_1.default.ok(index.getComponent('Card'), 'a component in a custom componentsPath folder must still be indexed, under its own (not a views-root-relative) tag');
 });
 //# sourceMappingURL=projectIndex.test.js.map

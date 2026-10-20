@@ -120,4 +120,10 @@ echo $children; $data['x'];
 $this->x ??= 1;`;
     strict_1.default.deepEqual((0, index_js_1.propsOf)(source).sort(), ['hasLabel', 'label', 'title', 'type']);
 });
+(0, node_test_1.default)('propDeclarationOffset finds a docblock @var/@param tag or a legacy ??= line, and null when neither exists', () => {
+    const source = `<?php\n/** @var string $title the heading */\n$label ??= 'Input';\n`;
+    strict_1.default.equal((0, index_js_1.propDeclarationOffset)(source, 'title'), source.indexOf('@var'));
+    strict_1.default.equal((0, index_js_1.propDeclarationOffset)(source, 'label'), source.indexOf('$label'));
+    strict_1.default.equal((0, index_js_1.propDeclarationOffset)(source, 'missing'), null);
+});
 //# sourceMappingURL=resolve.test.js.map

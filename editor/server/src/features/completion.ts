@@ -182,7 +182,12 @@ export class CompletionProvider {
       for (const prop of comp.props.values()) {
         if (prop.isRequired) {
           const name = spell(prop.name, this.settings.propCase);
-          snippet += ` ${name}="\${${propIndex}:${prop.defaultValue ?? prop.name}}"`;
+          const placeholder = `\${${propIndex}:${prop.defaultValue ?? prop.name}}`;
+          // prop.kind-aware, matching extension.js's own tag-completion snippet: a string prop gets a quoted
+          // placeholder, anything else (array/object/int/bool/other) gets a `{ }` expression placeholder instead -
+          // `items="items"` for a required `array $items` is a string literal where the engine needs an
+          // expression, and would silently fail at render time rather than at the completion the user just accepted.
+          snippet += prop.kind === 'string' ? ` ${name}="${placeholder}"` : ` ${name}={${placeholder}}`;
           propIndex++;
         }
       }

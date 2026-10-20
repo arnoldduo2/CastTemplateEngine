@@ -1,12 +1,16 @@
+import * as fs from 'fs';
 import {
   Hover,
   MarkupKind,
   Position
 } from 'vscode-languageserver';
-import { BUILTIN_HOVERS, CHAIN_HOVER, ECHO_HOLE_HOVER, scanChainCalls } from 'cast-language-core';
+import { BUILTIN_HOVERS, CHAIN_HOVER, ECHO_HOLE_HOVER, propsOf, scanChainCalls } from 'cast-language-core';
 import { CastDocument } from '../parser/ast.js';
 import { ProjectIndex } from '../index/projectIndex.js';
 import { getCastSyntaxSpec } from '../syntaxSpec.js';
+import { nonComponentReferences } from '../index/references.js';
+
+const KIND_TITLE: Record<string, string> = { component: 'Component', 'legacy-component': 'Component (legacy)', view: 'View', module: 'Module' };
 
 const WORD_CHAR = /[@A-Za-z0-9_.]/;
 
@@ -59,7 +63,14 @@ export class HoverProvider {
     // 1. Hover on Component tag
     for (const comp of doc.components) {
       if (this.positionInRange(position, comp.nameRange)) {
-        return this.getComponentHover(comp.name);
+        const hover = this.getComponentHover(comp.name);
+        if (hover) return hover;
+        // Not an indexed component (unknown, or not yet indexed) - still say what was looked for, same as the
+        // extension's own generic references()-based hover, rather than silently showing nothing (a Ctrl+click-
+        // then-see-nothing experience this plan's design calls out as a real parity gap, not a hypothetical one).
+        if (comp.name === 'Slot') continue;
+        const { file, tried } = this.projectIndex.resolveComponentTag(comp.name);
+        return this.referenceHover('component', comp.name, file, tried);
       }
 
       // Hover on Component attribute
@@ -91,7 +102,39 @@ export class HoverProvider {
       }
     }
 
+    // 4. Hover on a legacy Component()/view()/module() reference - same resolution DefinitionProvider and
+    // DocumentLinksProvider already share via references.ts, so all three features agree.
+    for (const ref of nonComponentReferences(doc, this.projectIndex)) {
+      if (this.positionInRange(position, ref.range)) {
+        const label = doc.text.slice(offsetAt(doc.text, ref.range.start), offsetAt(doc.text, ref.range.end));
+        return this.referenceHover(ref.kind, label, ref.file, ref.tried);
+      }
+    }
+
     return null;
+  }
+
+  /** The hover for a resolved/unresolved file reference (a component tag with no indexed metadata, or a legacy
+   * Component()/view()/module() call) - ported from extension.js's Hovers (the "No file found. Looked for:"
+   * text is the main way a user debugs a misnamed reference, so losing it once the LSP takes over would be a
+   * real regression, not a cosmetic one). */
+  private referenceHover(kind: string, label: string, file: string | null, tried: string[]): Hover {
+    let md = `**${KIND_TITLE[kind] || 'Cast'}** \`${label}\`\n\n`;
+    if (file) {
+      md += `\`${file}\`\n\n`;
+      if (kind === 'component' || kind === 'legacy-component') {
+        try {
+          const props = propsOf(fs.readFileSync(file, 'utf8'));
+          if (props.length) md += `Props: ${props.map((p) => '`' + p + '`').join(', ')}\n\n`;
+        } catch {
+          /* unreadable file: no props */
+        }
+      }
+      md += 'Ctrl+click to open.';
+    } else {
+      md += 'No file found. Looked for:\n\n' + tried.slice(0, 8).map((t) => '- `' + t + '`').join('\n');
+    }
+    return markdownHover(md);
   }
 
   private getComponentHover(tag: string): Hover | null {

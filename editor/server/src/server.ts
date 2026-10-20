@@ -64,6 +64,7 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
   }
 
   projectIndex.setWorkspaceRoots(roots);
+  projectIndex.setSettings(settings);
   await projectIndex.indexAll();
 
   // Check PHP runtime
@@ -148,6 +149,7 @@ connection.onDidChangeConfiguration(async () => {
   const raw = await connection.workspace.getConfiguration('cast');
   settings = resolveSettings(raw as Partial<CastSettings> | undefined);
   completionProvider.setSettings(settings);
+  projectIndex.setSettings(settings);
   await projectIndex.indexAll();
   for (const document of documents.all()) {
     await validateDocument(document);

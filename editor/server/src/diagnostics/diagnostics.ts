@@ -1,6 +1,6 @@
 import { DiagnosticSeverity, Position, Range } from 'vscode-languageserver';
 import { camel } from 'cast-language-core';
-import { CastDocument } from '../parser/ast.js';
+import { CastDocument, ComponentNode } from '../parser/ast.js';
 import { ProjectIndex } from '../index/projectIndex.js';
 import { CastDiagnostic, ComponentMetadata, PropDefinition } from '../types.js';
 import { CastSettings } from '../settings.js';
@@ -17,6 +17,13 @@ function positionAt(text: string, offset: number): Position {
 
 function rangeAt(text: string, start: number, end: number): Range {
   return { start: positionAt(text, start), end: positionAt(text, end) };
+}
+
+function offsetAt(text: string, position: Position): number {
+  const lines = text.split('\n');
+  let offset = 0;
+  for (let i = 0; i < position.line; i++) offset += lines[i].length + 1;
+  return offset + position.character;
 }
 
 /** The closest of `candidates` to `word` (edit distance <= 2, or the same name in another case/kebab spelling). */
@@ -53,8 +60,8 @@ export class DiagnosticsManager {
 
   public getFastDiagnostics(doc: CastDocument, settings: CastSettings): CastDiagnostic[] {
     if (settings.diagnostics === 'off') return [];
-    // component-tag issues (unknown/invalid-value/deprecated/deprecated-prop/mixed-echo-style) respect the
-    // configured level; parser-sourced structural errors and missing-prop/missing-key/props-legacy-conflict stay
+    // component-tag issues (unknown/invalid-value/deprecated/deprecated-prop/mixed-echo-style/missing-prop)
+    // respect the configured level; parser-sourced structural errors and missing-key/props-legacy-conflict stay
     // at their own fixed severity unconditionally - matches editor/vscode/lib/complete.js's own SEVERITY mapping.
     const componentSeverity = settings.diagnostics === 'warning' ? DiagnosticSeverity.Warning : DiagnosticSeverity.Hint;
 
@@ -76,30 +83,46 @@ export class DiagnosticsManager {
         });
       }
 
+      // An undocumented component (no prop that isn't merely inferred from a `??=` default) is never flagged for
+      // unknown/missing/deprecated/invalid-value props - matches editor/vscode/lib/complete.js's own
+      // `documented.length` skip. Without this, every legacy ??=-only component - the most common shape in an
+      // older project - got flagged for every attribute it has, since parseComponent infers a prop entry for each
+      // ??= default but those are never "documented" in the sense this diagnostic is about.
+      const documented = [...meta.props.values()].filter((p) => !p.inferred);
+      if (!documented.length) continue;
+
       const providedAttrs = new Set<string>();
       for (const attr of comp.attributes) {
-        providedAttrs.add(attr.name);
+        if (attr.name) providedAttrs.add(camel(attr.name));
       }
+      const hasSpread = comp.attributes.some((a) => a.isSpread);
 
-      // Check required props
-      for (const [propName, propDef] of meta.props.entries()) {
-        if (propDef.isRequired) {
-          // Can be satisfied by attribute OR by <Slot name="propName">
-          const isSatisfiedByAttr = providedAttrs.has(propName);
-          const isSatisfiedBySlot = meta.slots.some((slot) => slot.name === propName);
+      // Check required props - skipped when a spread attribute could be providing anything (`{...$props}`,
+      // matches the extension's own hasSpread guard), and matched by the engine's camelCasing (`has-label` on the
+      // tag satisfies a documented `hasLabel`), not the raw written spelling.
+      if (!hasSpread) {
+        for (const [propName, propDef] of meta.props.entries()) {
+          if (propDef.isRequired) {
+            const isSatisfiedByAttr = providedAttrs.has(camel(propName));
+            const isSatisfiedBySlot = meta.slots.some((slot) => slot.name === propName) || this.isProvidedBySlot(doc, comp, propName);
 
-          if (!isSatisfiedByAttr && !isSatisfiedBySlot) {
-            diagnostics.push({
-              range: comp.nameRange,
-              message: `Component <${comp.name}> requires prop '${propName}' of type '${propDef.type}'`,
-              severity: DiagnosticSeverity.Error,
-              code: 'missing-prop',
-              fix: [{
-                title: `Add ${propName}="${propDef.defaultValue ?? ''}"`,
-                newText: ` ${propName}="${propDef.defaultValue ?? ''}"`,
-                range: comp.nameRange
-              }]
-            });
+            if (!isSatisfiedByAttr && !isSatisfiedBySlot) {
+              diagnostics.push({
+                range: comp.nameRange,
+                message: `Component <${comp.name}> requires prop '${propName}' of type '${propDef.type}'`,
+                // extension.js's "missing" diagnostic sets no severity field of its own, so publishDiagnostics'
+                // SEVERITY[level] fallback applies - Hint by default, Warning under cast.diagnostics: "warning" -
+                // never a fixed Error. The comment above this method about missing-prop/missing-key/
+                // props-legacy-conflict all staying "at their own fixed severity" was wrong for this one kind.
+                severity: componentSeverity,
+                code: 'missing-prop',
+                fix: [{
+                  title: `Add ${propName}="${propDef.defaultValue ?? ''}"`,
+                  newText: ` ${propName}="${propDef.defaultValue ?? ''}"`,
+                  range: comp.nameRange
+                }]
+              });
+            }
           }
         }
       }
@@ -245,6 +268,17 @@ export class DiagnosticsManager {
     }
 
     return diagnostics;
+  }
+
+  /** A required prop can also be given by a `<Slot name="x">` child inside the tag's own body, not just an
+   * attribute or a documented @slot - matches editor/vscode/lib/complete.js's own isProvidedBySlot. */
+  private isProvidedBySlot(doc: CastDocument, comp: ComponentNode, propName: string): boolean {
+    if (comp.isSelfClosing || !comp.pairedClosingTag) return false;
+    const bodyStart = offsetAt(doc.text, comp.range.end);
+    const bodyEnd = offsetAt(doc.text, comp.pairedClosingTag.range.start);
+    const body = doc.text.slice(bodyStart, bodyEnd);
+    const re = new RegExp(`<Slot\\s+name\\s*=\\s*["']${propName}["']`);
+    return re.test(body);
   }
 
   /** The documented prop for an attribute name, matching the engine's camelCasing (`has-label` is `hasLabel`). */

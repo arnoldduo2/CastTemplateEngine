@@ -64,12 +64,39 @@ function projectWithFakeLanguageClient(files, settings = {}) {
     providers: vscode.providers,
     extension,
     vscode,
+    clientInstances: fakeClient.instances,
     fireLspState: async (stateName) => {
       fakeClient.fire(stateName);
       await new Promise((r) => setImmediate(r));
     },
   };
 }
+
+// Every module that requires "cast-language-core" directly: each caches its own "core = null" fallback state in
+// Node's module cache the moment it's required under the simulated failure below, so all of them (not just
+// extension.js) must be evicted both before (fresh load) and after (so later tests get the real module back).
+const CORE_CONSUMERS = ["../extension", "../lib/docblock", "../lib/propsBlock", "../lib/resolve", "../lib/scan", "../lib/indent"];
+
+test("activate() never throws, and every hand-rolled provider still registers, when cast-language-core fails to load entirely", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cast-ext-nocore-"));
+  const vscode = create({ root, settings: {} });
+  const original = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "vscode") return vscode;
+    if (request === "cast-language-core") throw new Error("simulated: npm install never ran, or a --no-dependencies VSIX");
+    return original.call(this, request, ...rest);
+  };
+  for (const mod of CORE_CONSUMERS) delete require.cache[require.resolve(mod)];
+  let extension;
+  try {
+    extension = require("../extension");
+    assert.doesNotThrow(() => extension.activate({ subscriptions: [], globalState: vscode.globalState }));
+  } finally {
+    Module._load = original;
+    for (const mod of CORE_CONSUMERS) delete require.cache[require.resolve(mod)];
+  }
+  assert.ok(vscode.providers.links && vscode.providers.definition && vscode.providers.hover, "every hand-rolled provider still registered");
+});
 
 test("activation registers links, definitions and hovers for .cast.php files", () => {
   const { providers } = project({});
@@ -447,6 +474,17 @@ test("the extension's own Hovers/Definitions/Completions/Links/diagnostics/Fixes
   assert.deepEqual(out, [], "diagnostics are cleared, not computed, once the LSP owns them");
 });
 
+test("the LSP's initializationOptions include config/view.php's components override, the same way locations() folds it in for this extension's own fallback engine", async () => {
+  const { clientInstances } = projectWithFakeLanguageClient({
+    "config/view.php": "<?php return ['paths' => [resource_path('views')], 'components' => 'ui'];",
+  });
+  assert.equal(clientInstances.length, 1);
+  assert.deepEqual(clientInstances[0].clientOptions.initializationOptions.componentsPath, [
+    path.join("resources/views", "ui"),
+    "resources/views/components",
+  ]);
+});
+
 test("the extension's own engine resumes once the LSP reports Stopped after being Running", async () => {
   const { providers, fireLspState } = projectWithFakeLanguageClient({});
   await fireLspState("Running");
@@ -457,4 +495,22 @@ test("the extension's own engine resumes once the LSP reports Stopped after bein
 
   assert.notEqual(providers.hover.provideHover(doc, somePosition), undefined);
   assert.notEqual(providers.links.provideDocumentLinks(doc), undefined);
+});
+
+test("diagnostics already published for an open document are cleared (not left stale) the moment the LSP reports Running - not only on the next edit", async () => {
+  const src = '<Btns.Button titel="x" />'; // a known-wrong attribute, so publishDiagnostics has something to say
+  const { vscode, extension, fireLspState } = projectWithFakeLanguageClient({
+    "resources/views/components/btns/button.cast.php": "<?php /** @var string $title */ ?>",
+  });
+  const doc = document(path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, VIEW), src);
+  vscode.workspace.textDocuments.push(doc);
+
+  // Before Running: this extension's own engine publishes a diagnostic for the unknown "titel" attribute.
+  extension.publishDiagnostics(doc, vscode.collections.cast);
+  assert.notDeepEqual(vscode.collections.cast.get(doc.uri.fsPath), [], "sanity: something was published to clear");
+
+  await fireLspState("Running");
+  await new Promise((r) => setTimeout(r, 300)); // past refresh()'s 250ms debounce
+
+  assert.deepEqual(vscode.collections.cast.get(doc.uri.fsPath), [], "stale diagnostics must be cleared once the LSP takes over, without waiting for an edit");
 });

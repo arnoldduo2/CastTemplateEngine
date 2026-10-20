@@ -3,7 +3,28 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const Module = require("node:module");
 const { parseComponent, camel, readType, splitUnion } = require("../lib/docblock");
+
+test("lib/docblock degrades to safe stand-ins (never throws) when cast-language-core fails to load", () => {
+  const original = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "cast-language-core") throw new Error("simulated: npm install never ran");
+    return original.call(this, request, ...rest);
+  };
+  delete require.cache[require.resolve("../lib/docblock")];
+  let degraded;
+  try {
+    degraded = require("../lib/docblock");
+  } finally {
+    Module._load = original;
+    delete require.cache[require.resolve("../lib/docblock")];
+  }
+
+  assert.deepEqual(degraded.parseComponent("<?php /** @var string $x */"), { description: "", props: [], slots: [], examples: [], deprecated: false });
+  assert.equal(degraded.camel("has-label"), "hasLabel", "camel still works - it's cheap enough to vendor inline as a fallback");
+  assert.deepEqual(degraded.splitUnion("string|null"), ["string|null"]);
+});
 
 const fixtures = path.join(__dirname, "..", "..", "..", "tests", "fixtures", "components");
 

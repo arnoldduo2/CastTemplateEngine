@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseComponent, resolveLegacyComponent, resolveView, resolveModule, splitUnion } from 'cast-language-core';
+import { parseComponent, resolveComponent, resolveLegacyComponent, resolveView, resolveModule, splitUnion } from 'cast-language-core';
 import { ComponentMetadata, PropDefinition } from '../types.js';
 import { CastSettings, DEFAULT_SETTINGS } from '../settings.js';
 import { CastParser } from '../parser/castParser.js';
@@ -39,6 +39,13 @@ export class ProjectIndex {
     return this.workspaceRoots.flatMap((root) => this.settings.componentsPath.map((p) => path.join(root, p)));
   }
 
+  /** A `<Tag>` component's candidate paths, same componentsPath settings as the in-memory index itself - used
+   * only for the "tried these paths" hover on a tag that isn't (or isn't yet) indexed; getComponent() is still
+   * the fast, authoritative lookup for a tag the index already has. */
+  public resolveComponentTag(tag: string): { file: string | null; tried: string[] } {
+    return resolveComponent(tag, this.componentDirs(), this.settings.extension);
+  }
+
   /** `Component('btns.add-new')` - resolved against the same componentsPath settings as component tags. */
   public resolveLegacyComponent(name: string): { file: string | null; tried: string[] } {
     return resolveLegacyComponent(name, this.componentDirs(), this.settings.extension);
@@ -73,8 +80,12 @@ export class ProjectIndex {
   private async scanDirectory(root: string): Promise<void> {
     if (!fs.existsSync(root)) return;
 
-    // Scan standard component folders
+    // cast.componentsPath (settings.ts) first, so a project with a custom folder (or config/view.php's
+    // `'components' => '...'` override, which the extension forwards as part of componentsPath - see
+    // editor/vscode/extension.js's castSettings) gets its components indexed under the right tag/baseDir, not
+    // only (or wrongly, via a fallback entry below with the wrong baseDir) picked up by coincidence.
     const potentialDirs = [
+      ...this.settings.componentsPath.map((p) => path.join(root, p)),
       path.join(root, 'resources/views/components'),
       path.join(root, 'resources/views'),
       path.join(root, 'src/resources/views/components'),
@@ -85,7 +96,7 @@ export class ProjectIndex {
       path.join(root, 'starter/resources/views'),
     ];
 
-    for (const dir of potentialDirs) {
+    for (const dir of new Set(potentialDirs)) {
       if (fs.existsSync(dir)) {
         const isFramework = dir.includes('starter') || dir.includes('vendor');
         await this.scanRecursive(dir, dir, isFramework);

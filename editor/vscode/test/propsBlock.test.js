@@ -1,7 +1,27 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const Module = require("node:module");
 const { parsePropsBlock } = require("../lib/propsBlock");
+
+test("lib/propsBlock degrades to a safe empty result (never throws) when cast-language-core fails to load", () => {
+  const original = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "cast-language-core") throw new Error("simulated: npm install never ran");
+    return original.call(this, request, ...rest);
+  };
+  delete require.cache[require.resolve("../lib/propsBlock")];
+  let degraded;
+  try {
+    degraded = require("../lib/propsBlock");
+  } finally {
+    Module._load = original;
+    delete require.cache[require.resolve("../lib/propsBlock")];
+  }
+
+  assert.deepEqual(degraded.parsePropsBlock("@props { string $x; }"), { props: [], extends: null, start: null, end: null, markupBefore: null });
+  assert.equal(degraded.firstMarkupOffset("x<?php ?>"), null);
+});
 
 test("the full grammar: types, nullable, unions, trailing comments, defaults, a required (no-default) entry", () => {
   const src = `<?php

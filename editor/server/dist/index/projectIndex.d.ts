@@ -11,6 +11,13 @@ export declare class ProjectIndex {
     /** Stores the resolved cast.* settings and re-indexes, so a changed componentsPath/extension takes effect. */
     setSettings(settings: CastSettings): void;
     private componentDirs;
+    /** A `<Tag>` component's candidate paths, same componentsPath settings as the in-memory index itself - used
+     * only for the "tried these paths" hover on a tag that isn't (or isn't yet) indexed; getComponent() is still
+     * the fast, authoritative lookup for a tag the index already has. */
+    resolveComponentTag(tag: string): {
+        file: string | null;
+        tried: string[];
+    };
     /** `Component('btns.add-new')` - resolved against the same componentsPath settings as component tags. */
     resolveLegacyComponent(name: string): {
         file: string | null;

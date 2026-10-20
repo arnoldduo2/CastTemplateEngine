@@ -36,7 +36,23 @@ test('indexFile uses the shared parseComponent, not an ad-hoc regex, and keeps t
 test('ProjectIndex.resolveLegacyComponent/resolveView/resolveModule resolve against the configured settings', () => {
   const root = fixtureRoot();
   const index = new ProjectIndex([root]);
-  index.setSettings(resolveSettings({ componentsPath: ['resources/views/components'] }));
+  // A non-default componentsPath, so this only passes if setSettings actually took effect - the default value
+  // would resolve the same component dir either way and prove nothing.
+  fs.mkdirSync(path.join(root, 'ui/btns'), { recursive: true });
+  fs.renameSync(path.join(root, 'resources/views/components/btns/add-new.cast.php'), path.join(root, 'ui/btns/add-new.cast.php'));
+  index.setSettings(resolveSettings({ componentsPath: ['ui'] }));
   const { file } = index.resolveLegacyComponent('btns.add-new');
-  assert.ok(file && file.endsWith('add-new.cast.php'));
+  assert.ok(file && file.endsWith(path.join('ui', 'btns', 'add-new.cast.php')));
+});
+
+test('indexAll scans cast.componentsPath, not just the hardcoded resources/views/components default', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cast-project-index-custom-'));
+  fs.mkdirSync(path.join(root, 'ui-components'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'ui-components/card.cast.php'), '<?php /** Card component */ ?>');
+
+  const index = new ProjectIndex([root]);
+  index.setSettings(resolveSettings({ componentsPath: ['ui-components'] }));
+  await index.indexAll();
+
+  assert.ok(index.getComponent('Card'), 'a component in a custom componentsPath folder must still be indexed, under its own (not a views-root-relative) tag');
 });

@@ -3,6 +3,7 @@ import test from 'node:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { DiagnosticSeverity } from 'vscode-languageserver';
 import { CastParser } from '../parser/castParser.js';
 import { ProjectIndex } from '../index/projectIndex.js';
 import { DiagnosticsManager } from '../diagnostics/diagnostics.js';
@@ -43,6 +44,54 @@ const DEPRECATED_CARD = `<?php
  * @var string $title The card's heading
  */
 `;
+
+const CARD_WITH_CAMEL_PROP = `<?php
+/**
+ * Card component
+ * @var string $title The card's heading
+ * @var string $iconName The icon to show, required
+ */
+`;
+
+/** No docblock @var/@param tags at all - every prop comes only from a ??= default (inferred: true), the most
+ * common shape in an older/legacy project. */
+const LEGACY_ONLY_TOOLTIP = `<?php
+$text ??= 'Tip';
+$position ??= 'top';
+`;
+
+test('a required prop written in kebab-case still satisfies the camelCase-documented prop (no false missing-prop)', () => {
+  const { manager, doc } = setup(CARD_WITH_CAMEL_PROP, '<Card title="x" icon-name="bell" />');
+  const diagnostics = manager.getFastDiagnostics(doc, DEFAULT_SETTINGS);
+  assert.equal(diagnostics.find((d) => d.code === 'missing-prop'), undefined, 'icon-name already satisfies iconName');
+});
+
+test('a spread attribute ({...$props}) suppresses missing-prop entirely - it could be providing anything', () => {
+  const { manager, doc } = setup(CARD_WITH_CAMEL_PROP, '<Card {...$props} />');
+  const diagnostics = manager.getFastDiagnostics(doc, DEFAULT_SETTINGS);
+  assert.equal(diagnostics.find((d) => d.code === 'missing-prop'), undefined);
+});
+
+test('a required prop provided by a call-site <Slot name="..."> child (not a documented @slot tag) satisfies missing-prop', () => {
+  const { manager, doc } = setup(CARD, '<Card variant="primary"><Slot name="title">Hi</Slot></Card>');
+  const diagnostics = manager.getFastDiagnostics(doc, DEFAULT_SETTINGS);
+  assert.equal(diagnostics.find((d) => d.code === 'missing-prop' && d.message.includes("'title'")), undefined);
+});
+
+test('an undocumented (legacy ??=-only) component is never flagged for an unknown attribute', () => {
+  const { manager, doc } = setup(LEGACY_ONLY_TOOLTIP, '<Tooltip text="x" classX="mt-2" />');
+  const diagnostics = manager.getFastDiagnostics(doc, DEFAULT_SETTINGS);
+  assert.deepEqual(diagnostics, [], 'nothing documented means nothing to be wrong about');
+});
+
+test('missing-prop severity follows cast.diagnostics (Hint by default, Warning under "warning"), not a fixed Error', () => {
+  const { manager, doc } = setup(CARD, '<Card />');
+  const hint = manager.getFastDiagnostics(doc, DEFAULT_SETTINGS).find((d) => d.code === 'missing-prop')!;
+  assert.equal(hint.severity, DiagnosticSeverity.Hint);
+
+  const warning = manager.getFastDiagnostics(doc, { ...DEFAULT_SETTINGS, diagnostics: 'warning' }).find((d) => d.code === 'missing-prop')!;
+  assert.equal(warning.severity, DiagnosticSeverity.Warning);
+});
 
 test('diagnostics: "off" silences every LSP-computed diagnostic, not just parser errors', () => {
   const { manager, doc } = setup(CARD, '<Card />');
