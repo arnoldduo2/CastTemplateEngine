@@ -30,7 +30,7 @@ export function getCastSyntaxSpec(): CastSyntaxSpec {
 
   // Embedded fallback matching cast-syntax.json
   cachedSpec = {
-    version: '1.7.0',
+    version: '1.8.0',
     echo: {
       hole: { open: '@{', close: '}', description: 'Echo interpolation for PHP expressions' },
       native: { open: '<?=', close: '?>', description: 'Standard PHP short-echo tags' },

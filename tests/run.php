@@ -609,6 +609,18 @@ test('@css scoped compilation and dynamic CSS variables with @styles tag', funct
     }
 });
 
+test('@children prints the component body, or a literal fallback when there is none', function () {
+    same('<div>Hi</div>', page('<ChildrenFallback>Hi</ChildrenFallback>'));
+    same('<div>empty content</div>', page('<ChildrenFallback />'));
+});
+
+test('@includes compiles to a call to __includes(), the same framework-helper pattern as @route/@cast/@modules', function () {
+    same(
+        "<?= __includes('layouts.header', \$data) ?>;",
+        (new \CastTemplateEngine\Directives())->compile("@includes('layouts.header', \$data);")
+    );
+});
+
 test('CastTemplate::renderComponent direct rendering', function () {
     global $engine;
     $html = $engine->renderComponent('Badge', ['text' => 'Direct']);

@@ -2,6 +2,41 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 3.0.0
+
+- **LSP/extension precedence**: the VS Code extension now defers entirely to `cast-language-server` for
+  hover, go-to-definition, completion, document links, and diagnostics-with-quick-fixes once the LSP
+  confirms a successful `State.Running` handshake, falling back to its own hand-rolled engine
+  automatically whenever the LSP isn't installed, fails to start, or later stops - the two engines are
+  never both active for the same capability at once.
+- **`cast-language-core`**: a new shared TypeScript package (`editor/language-core/`) carrying the pure,
+  host-independent logic both the LSP and the extension need - component docblock/`@props{}` parsing,
+  component/legacy-view/module name resolution, directive and component-tag scanning, and completion-
+  context detection - so the two no longer carry independently-maintained copies that can drift apart.
+- **The LSP reaches full parity** with the extension's own engine:
+  - Diagnostics: unknown/missing/deprecated props, invalid enum values, missing `key` on mapped tags,
+    mixed `<?= ?>`/`@{ }` echo styles, and `@props{}`/legacy `??=` conflicts, each with the extension's
+    own quick fixes, respecting `cast.diagnostics`.
+  - Hover: builtins, the `@{ }` echo hole, fluent `.filter()/.map()` chains, component docs, legacy
+    `Component()`/`view()`/`module()` references (with their resolved file and props, or "looked for"
+    when unresolved).
+  - Go to Definition: a prop's own declaration line (docblock `@var`/`@param` and legacy `??=`, not only
+    `@props{}`), and legacy `Component()`/`view()`/`module()` references.
+  - Document Links and slot/attribute/value completion, propCase-aware spelling, used-attribute dedup,
+    and prop-kind-aware snippet insertion.
+- **`cast.*` settings now reach the LSP**: `componentsPath` (including a `config/view.php` `'components'`
+  override), `viewsPath`, `resourcesPath`, `extension`, `propCase`, and `diagnostics` are sent at startup
+  and kept in sync over `workspace/didChangeConfiguration`.
+- **New directives**:
+  - `@children` - prints the content captured between a component's opening and closing tags, or the
+    literal `empty content` when there was none.
+  - `@includes(...)` - a new `Directives::FUNCTION_DIRECTIVES` entry (alongside `@route`/`@cast`/
+    `@modules`/etc.), compiling to a call to a host-framework-supplied `__includes($view, $data)`.
+- **Hardening**: every `cast-language-core` consumer in the VS Code extension (and the LSP client wiring
+  itself) now degrades gracefully instead of crashing extension activation when the package - a locally
+  staged, not-published-to-npm dependency - fails to install (offline, a locked file, a `--no-dependencies`
+  VSIX).
+
 ## 2.1.2
 
 - **Fix (Windows)**: the VS Code extension failed to start the language server with `spawn ...\npm\cast-language-server ENOENT`. `where` returns npm's extensionless sh shim first, which Node cannot spawn; the extension now launches the real `dist/server.js` beside the shim with `node`. Non-Windows behaviour is unchanged.

@@ -26,7 +26,7 @@ $spec = [
     '$schema' => 'https://json-schema.org/draft/2020-12/schema',
     'title' => 'Cast Syntax Specification',
     'description' => 'Machine-readable specification of the Cast Template Engine syntax grammar and directives.',
-    'version' => '1.7.0',
+    'version' => '1.8.0',
     'fileExtensions' => ['.cast.php'],
     'echo' => [
         'hole' => [
@@ -159,6 +159,13 @@ $spec = [
         'renderScripts' => [
             'directive' => '@scripts',
             'description' => 'Renders gathered component script tags before layout body close.'
+        ]
+    ],
+    'content' => [
+        'children' => [
+            'directive' => '@children',
+            'description' => 'Prints the content captured between a component\'s opening and closing tags, or a literal fallback when there was none.',
+            'fallback' => 'empty content'
         ]
     ],
     'props' => [

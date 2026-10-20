@@ -21,6 +21,7 @@ namespace CastTemplateEngine;
  *   @map($items, ($item, $i) => return(<Card key={$i}>...</Card>))
  *   @filter($items, ($item) => $item->qty > 0)
  *   @$items.filter(...).map(...)
+ *   @children                              <?= $children !== '' ? $children : 'empty content' ?>
  *   @@                                      a literal @
  *
  * Strict directive validation: unknown directives raise TemplateError with file and line.
@@ -28,7 +29,7 @@ namespace CastTemplateEngine;
 final class Directives
 {
     private const OPEN = ['for', 'foreach', 'forelse', 'while', 'if'];
-    private const WORD = '(forelse|foreach|elseif|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|switch|unless|isset|default|empty|else|case|for|while|if|php|break|continue|map|filter|scripts|styles|script|js|css)';
+    private const WORD = '(forelse|foreach|elseif|endforelse|endforeach|endswitch|endunless|endisset|endwhile|endphp|endfor|endif|switch|unless|isset|default|empty|else|case|for|while|if|php|break|continue|map|filter|scripts|styles|script|js|css|children)';
     private const CSS_RULES = '(media|import|keyframes|charset|font-face|supports|page|namespace|layer|container|property|scope|starting-style|view-transition)';
 
     /**
@@ -46,6 +47,7 @@ final class Directives
         'csrf' => '__csrf',
         'alerts' => '__getAlerts',
         'modules' => '__modules',
+        'includes' => '__includes',
     ];
 
     private string $src = '';
@@ -362,6 +364,11 @@ final class Directives
                 return "<?= \\CastTemplateEngine\\Assets::renderScripts() ?>";
             case 'styles':
                 return "<?= \\CastTemplateEngine\\Assets::renderStyles() ?>";
+            case 'children':
+                // $children (CastTemplate::render()) is the content captured between a component's opening and
+                // closing tags, defaulting to '' when the tag was self-closing or had nothing between them -
+                // @children prints it, or a literal fallback when there was nothing to print.
+                return "<?= \$children !== '' ? \$children : 'empty content' ?>";
             default:                                                                // break, continue
                 $this->expectInside(['for', 'foreach', 'forelse', 'while', 'switch'], $word, $line);
                 return $arg === null || $arg === '' ? "<?php $word; ?>" : "<?php if ($arg) $word; ?>";
