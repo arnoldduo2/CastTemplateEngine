@@ -122,6 +122,15 @@ test("a directive next to a component and PHP in the same view", { skip }, async
   assert.equal(find(t, "Card").length, 2);
 });
 
+test("a bare @php ... @endphp block's body is embedded PHP, same as a real <?php ?> block - a /** */ comment inside it is recognized as a comment, not reflowable plain text", { skip }, async () => {
+  const t = await tokenize(["@php", "/**", " * hello world", " */", "$x = 1;", "@endphp", "@includes('x')"].join("\n"));
+  assert.ok(has(find(t, "php"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "endphp"), "keyword.control.directive.cast"));
+  assert.ok(has(find(t, "/**"), "comment.block.documentation.phpdoc.php"), "the docblock is recognized as a comment");
+  assert.ok(has(find(t, "/**"), "source.php"), "and scoped as embedded PHP, like a real <?php ?> block");
+  assert.ok(has(find(t, "$"), "variable.other.php"), "real code in the block is highlighted as PHP too");
+});
+
 test("@css highlights as CSS and supports @{ } holes", { skip }, async () => {
   const t = await tokenize(`@css(
 .list-group {

@@ -26,6 +26,9 @@
       "include": "#directive-styled"
     },
     {
+      "include": "#directive-php-block"
+    },
+    {
       "include": "#directive"
     },
     {
@@ -571,6 +574,33 @@
         },
         {
           "include": "#php-expression"
+        }
+      ]
+    },
+    "directive-php-block": {
+      "comment": "A bare `@php ... @endphp` block (no parens: see `directive`'s inline `@php(...)` form for that one) is, per Directives.php, 'a block of plain PHP - nothing inside is changed'. Scoping its body as an embedded source.php region (the same way the base grammar scopes a real `<?php ... ?>`) is what lets PHP highlighting, bracket matching and anything that reflows/formats by scope (comment-aware tooling, the HTML formatter's own 'leave code alone' regions) recognize it as code instead of plain HTML text - without this, a /** */ comment in here was invisible to all of that and got mangled as if it were reflowable prose.",
+      "begin": "(?<![\\w.@])(@)(php)\\b(?!\\s*\\()",
+      "end": "(?<![\\w.@])(@)(endphp)\\b",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+        },
+        "2": {
+          "name": "keyword.control.directive.cast"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.directive.cast keyword.control.directive.cast"
+        },
+        "2": {
+          "name": "keyword.control.directive.cast"
+        }
+      },
+      "contentName": "meta.embedded.block.php source.php",
+      "patterns": [
+        {
+          "include": "source.php"
         }
       ]
     },

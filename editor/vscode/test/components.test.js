@@ -210,9 +210,9 @@ test("diagnose: unknown prop (with a suggestion), missing required, value outsid
   assert.deepEqual(run('<Btns.Button title="t" block />'), [], "bare bool prop");
 });
 
-test("diagnose: whitelisted framework-helper directives (@htchars, @route, @cast, @csrf, @alerts, @modules) are not flagged as unknown", () => {
+test("diagnose: whitelisted framework-helper directives (@htchars, @route, @cast, @csrf, @alerts, @modules, @includes) are not flagged as unknown", () => {
   const d = diagnose(
-    '<meta content=@htchars($x)><a href=@route("/")>x</a>@cast($g)@csrf@alerts@modules("app")',
+    '<meta content=@htchars($x)><a href=@route("/")>x</a>@cast($g)@csrf@alerts@modules("app")@includes("stats.partials." . $data[\'pageName\'], $data)',
     () => null,
   );
   assert.deepEqual(d.filter((x) => x.kind === "unknown-directive"), [], "none of the whitelisted directives are flagged");

@@ -39,7 +39,7 @@ function diagnose(src, lookup) {
     "endswitch", "php", "endphp", "break", "continue", "empty", "map", "filter",
     "script", "js", "css", "scripts", "styles",
     // framework-helper directives - keep this in sync with Directives::FUNCTION_DIRECTIVES (vendor/anode/cast-template-engine/src/Directives.php)
-    "htchars", "route", "cast", "csrf", "alerts", "modules",
+    "htchars", "route", "cast", "csrf", "alerts", "modules", "includes",
   ]);
   const CSS_RULES = new Set([
     "media", "import", "keyframes", "charset", "font-face", "supports", "page", "namespace",
