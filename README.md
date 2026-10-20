@@ -386,6 +386,7 @@ Plain PHP works as before (`<?php ... ?>`, `<?= ... ?>`). For loops, conditions 
 | `@scripts` | outputs all collected component scripts and runtime before `</body>` |
 | `@css(...)` | scoped component styles with dynamic `@{ ... }` CSS variables |
 | `@styles` | outputs all collected component styles in `<head>` |
+| `@children` | prints the component's captured body (`$children`), or the literal `empty content` when there was none |
 | `@map($items, ($item, $i) => return(<Card key={$i}>...</Card>))` | loops over arrays or `stdClass` objects and renders markup |
 | `@$items.map(($item, $i) => (<Card key={$i}>...</Card>))` | method-chaining shorthand on collections |
 | `@filter($items, ($item) => condition)` | standalone in-place collection filtering |
@@ -393,6 +394,25 @@ Plain PHP works as before (`<?php ... ?>`, `<?= ... ?>`). For loops, conditions 
 | `@$items.filter(...).map(...)` | fluent filter-then-map chain on arrays / objects |
 | `@{ $cond ? return(<p>Yes</p>) : @render(<p>No</p>) }` | inline conditional Cast markup inside expressions (`return(...)` and `@render(...)` are aliases) |
 | `@@` | a literal `@` |
+
+### Framework-helper directives
+
+A curated whitelist of bare `@name(...)`/`@name` directives, each compiled as an echoed call to a real
+function your host framework (not this package) is expected to supply — the same way `@route(...)` compiles
+to `<?= route(...) ?>` and trusts Laravel's own `route()` helper. An actual typo still fails loudly at
+compile time with "Unknown directive", the same safety `@map`/`@filter`/etc. have.
+
+| Write | Calls |
+| --- | --- |
+| `@htchars(...)` | `htchars(...)` |
+| `@route(...)` | `route(...)` |
+| `@cast(...)` or `@cast` | `__cast(...)` / `__cast()` |
+| `@csrf` | `__csrf()` |
+| `@alerts` | `__getAlerts()` |
+| `@modules(...)` | `__modules(...)` |
+| `@includes(...)` | `__includes(...)` |
+
+See `CastTemplateEngine\Directives::FUNCTION_DIRECTIVES` to add another framework helper this way.
 
 ### Keys and `data-el-key`
 
@@ -504,10 +524,21 @@ The bundler:
 
 CastTemplateEngine provides a dedicated Language Server Protocol (LSP) and Tree-sitter grammar:
 
-- **`cast-language-server` (`editor/server/`):** Full TypeScript LSP server providing diagnostics, tag completions, prop hints, Go to Definition, formatting, and quick fixes.
+- **`cast-language-server` (`editor/server/`):** Full TypeScript LSP server providing diagnostics with quick
+  fixes, tag/attribute/slot/value completions, hover documentation, Go to Definition, Document Links, and
+  formatting.
+- **`cast-language-core` (`editor/language-core/`):** Shared TypeScript package carrying the host-independent
+  logic both the LSP and the VS Code extension need (component docblock parsing, name resolution, scanning,
+  completion-context detection) — the two consume one implementation instead of two that can drift apart.
+- **LSP/extension precedence:** when both the LSP and the VS Code extension's own hand-rolled engine are
+  installed, the extension defers entirely to the LSP once it reports a successful `State.Running` handshake
+  for hover, Go to Definition, completion, Document Links, and diagnostics-with-quick-fixes — falling back
+  to its own engine automatically if the LSP isn't installed, fails to start, or later stops. The two are
+  never both active for the same capability at once.
 - **`tree-sitter-cast` (`editor/tree-sitter-cast/`):** Standalone grammar with highlight, injection (PHP/CSS/JS), fold, and indent queries for Neovim (`nvim-treesitter`), Zed, Helix, and VS Code.
 - **Specification (`editor/spec/cast-syntax.json`):** Machine-readable syntax specification dynamically generated from the engine's reflection metadata (`php bin/gen-syntax-spec.php`).
 - **PHP Intelligence Bridge:** Injects PHP code inside echo holes `@{ ... }` and directives, mapping character positions to bundled Phpactor/PHP LSPs via bidirectional source maps.
+- **Settings:** `cast.componentsPath` (including a `config/view.php` `'components'` override), `cast.viewsPath`, `cast.resourcesPath`, `cast.extension`, `cast.propCase`, and `cast.diagnostics` are read by both the extension's own engine and, when installed, the LSP.
 
 ## Terminal Commands & CLI
 

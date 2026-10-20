@@ -4,20 +4,34 @@ High-performance, out-of-process Language Server Protocol (LSP) server for Cast 
 
 ## Overview
 
-`cast-language-server` provides rich language intelligence for Cast templates:
+`cast-language-server` provides rich language intelligence for Cast templates, at parity with (and, once
+installed and running, preferred over) the VS Code extension's own hand-rolled engine — see "Precedence"
+below:
 
-- **Diagnostics**: Fast AST parsing with real-time detection of unclosed or mismatched tags, unbalanced control directives (`@if`, `@foreach`, `@switch`), and `@props` syntax errors.
+- **Diagnostics**: Fast AST parsing with real-time detection of unclosed or mismatched tags, unbalanced control directives (`@if`, `@foreach`, `@switch`), `@props` syntax errors, unknown/missing/deprecated component props, invalid enum values, missing `key` on mapped tags, mixed echo styles, and `@props{}`/legacy `??=` conflicts, each with quick fixes.
 - **Strict-Typed `@props`**: Type validation, required vs optional props checking, and component inheritance resolution (`@props extends::...`).
 - **Autocompletion**:
   - Directives (`@if`, `@foreach`, `@props`, etc.)
   - Component tags with auto-filled required prop snippets
-  - Slots (`<Slot name="...">`)
-  - Attribute names with type-aware defaults
+  - Slots (`<Slot name="...">`), listing a parent component's actual declared slots
+  - Attribute names (propCase-aware spelling, deduped against attributes already on the tag) with type-aware defaults
+  - Attribute values for an enum/bool prop
   - `extends::` inheritance component paths
-- **Hover**: Rich Markdown hover cards for components, prop types/defaults, slot declarations, and directives.
-- **Go to Definition**: F12 / Ctrl+click navigation to component files, slot definitions, and inheritance targets.
+- **Hover**: Rich Markdown hover cards for components, prop types/defaults, slot declarations, directives, builtins, and legacy `Component()`/`view()`/`module()` references (with the resolved file and props, or the paths it looked for when unresolved).
+- **Go to Definition**: F12 / Ctrl+click navigation to component files, a prop's own declaration line (docblock or `@props{}`), slot definitions, inheritance targets, and legacy `Component()`/`view()`/`module()` references.
+- **Document Links**: the same set of references as Go to Definition, as clickable links.
 - **Formatting**: Full-document indentation and on-type line formatting.
 - **Embedded PHP Bridge**: Bidirectional character-accurate source maps (`SourceMap`, `VirtualPhpBuilder`) to bridge echo holes `@{ ... }` and directives to Phpactor or other PHP language servers.
+- **Settings**: `cast.componentsPath` (including a `config/view.php` `'components'` override), `cast.viewsPath`, `cast.resourcesPath`, `cast.extension`, `cast.propCase`, and `cast.diagnostics` are read from the client at startup (`initializationOptions`) and kept in sync over `workspace/didChangeConfiguration`.
+
+## Precedence
+
+When the VS Code extension's own hand-rolled engine is also installed, the extension defers to this
+server for hover, Go to Definition, completion, Document Links, and diagnostics-with-quick-fixes once its
+client confirms a successful `State.Running` handshake — falling back to its own engine automatically if
+this server isn't installed, fails to start, or later stops. The two share their host-independent core
+logic (component docblock parsing, name resolution, scanning, completion-context detection) through
+`cast-language-core` (`editor/language-core/`), so the shared feature set can't drift between them.
 
 ## Architecture
 

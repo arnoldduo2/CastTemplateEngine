@@ -67,14 +67,26 @@ A packaged `.vsix` (`npm run package`) can also be installed with *Extensions: I
 Since v2.0.0, CastFramework integrates a dedicated TypeScript Language Server (`cast-language-server`).
 The extension launches it automatically once it's installed (`php cast engine:editor-install lsp`) and
 resolvable on PATH — see `cast.languageServer.enable`/`cast.languageServer.path` below to disable it or
-point at a specific binary. Without it, every feature above still works; only the deeper PHP-aware
-intelligence (via PHPactor) is unavailable. (A standalone Tree-sitter grammar, `tree-sitter-cast`, also
-exists in the repo but isn't wired into the server yet.)
+point at a specific binary.
+
+**Precedence (since v3.0.0):** when the LSP client confirms a successful `State.Running` handshake, this
+extension's own hover, Go to Definition, completion, Document Links (the Ctrl+click/hover features
+described above), and diagnostics-with-quick-fixes step aside and the LSP serves those instead — the two
+are never both active for the same capability at once. If the LSP isn't installed, fails to start, or
+later stops (crash, or `cast.languageServer.enable` turned off and the window reloaded), this extension's
+own engine resumes automatically. The embedded PHP/CSS/JS bridge below, indentation/formatting, and
+snippets are always this extension's own — they have no LSP equivalent.
+
+The two share their core logic (component docblock parsing, name resolution, scanning, completion-context
+detection) through `cast-language-core` (`editor/language-core/`), a dependency staged locally by the
+installer rather than published to npm, instead of keeping two independent copies that could disagree.
 
 - **Strict-Typed `@props` Diagnostics**: Validates `@props { ... }` syntax, prop types, defaults, required parameters, and `extends::` inheritance targets in real time.
 - **Diagnostics & Code Actions**: Sub-millisecond syntax error detection, unclosed or mismatched tags, unbalanced directives, and quick fixes.
+- **Hover & Go to Definition**: Component docs, prop types/defaults, slot declarations, directives, and the view/legacy-component/module references listed above.
+- **Document Links**: Ctrl+click targets for component tags, `extends::` targets, and view/legacy-component/module references.
 - **Intelligent Autocompletion**: Component tags with automatically expanded prop snippets, slot completions, and typed attribute completions.
-- **Embedded Language Intelligence Bridge**: Injects PHP, CSS, and JS into virtual documents (`cast-embedded:`) allowing full PHP docblocks, type checks, and completions inside echo holes `@{ ... }`, `@css(...)`, and `@script(...)`.
+- **Embedded Language Intelligence Bridge**: Injects PHP, CSS, and JS into virtual documents (`cast-embedded:`) allowing full PHP docblocks, type checks, and completions inside echo holes `@{ ... }`, `@css(...)`, and `@script(...)` — not gated by LSP precedence (see above).
 
 ## Develop
 
