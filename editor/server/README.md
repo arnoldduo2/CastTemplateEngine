@@ -58,3 +58,8 @@ installs the VS Code extension) runs the steps above and then `npm install -g` f
 `cast-language-server` is resolvable from any project afterwards. It also checks for Node.js/npm and
 offers to download a pinned, checksum-verified PHPactor phar into `bin/phpactor.phar` if missing (PHP
 intelligence is disabled, not required, when PHPactor isn't present — see `src/php/engine.ts`).
+
+The full pipeline — the requirements check, the `Install PHPactor now? [Y/n]` prompt (the only one asked;
+everything else is a flag: `--yes`/`-y`, `--no-phpactor`, `--dry-run`), and each install step in order — is
+documented once in `editor/vscode/README.md`'s "What `engine:editor-install` does", since the same command
+drives both the extension and this server.

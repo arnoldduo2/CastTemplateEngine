@@ -564,6 +564,9 @@ php cast engine:editor-uninstall all            # Uninstall both
 
 Commands can also be called with space syntax (`php cast engine check`, `php cast ast <file>`) and can be extended by CastFramework via `CastTemplateEngine\Console\CommandRegistry::register(...)`.
 
+`engine:editor-install`'s full pipeline (requirements check, the one interactive question it asks, and each
+install step in order) is documented in `editor/vscode/README.md`'s "What `engine:editor-install` does".
+
 ## Documentation Snippets List
 
 The following snippet triggers are available in the editor:

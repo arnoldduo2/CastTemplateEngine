@@ -49,6 +49,26 @@ The older, extension-only `php cast engine:editor install [--editor=<name>]` sti
 
 A packaged `.vsix` (`npm run package`) can also be installed with *Extensions: Install from VSIX...*. A Marketplace release will follow.
 
+### What `engine:editor-install` does
+
+1. **Requirements check**, always run first and printed as a report: PHP ≥ 8.1, Node.js ≥ 18 and npm (both on
+   PATH), the required PHP extensions (`mbstring`, `tokenizer`, `phar`, `ctype`, `json`), whether PHPactor's
+   phar is already present, and whether the server is already built.
+2. **`--dry-run`** stops here and prints the plan instead of doing anything below.
+3. **The one interactive question** (skipped for `extension`-only installs, or when PHPactor is already
+   present): `Install PHPactor now? [Y/n]`. Blank or `y`/`yes` downloads a pinned, checksum-verified release
+   (~4.8 MB) to `editor/server/bin/phpactor.phar`; anything else skips it. This is the only prompt in the
+   whole command — everything else is a flag, not a question. It's skipped outright (never asked) when
+   `--yes`/`-y` is passed (auto-confirms yes), `--no-phpactor` is passed, or stdin isn't a TTY (CI/non-interactive).
+4. **Extension** (for `extension`/`all`): copies the extension into each target editor's extensions folder,
+   stages `cast-language-core` as a sibling directory (the extension's `file:../language-core` dependency),
+   then runs `npm ci --omit=dev` (or `npm install --omit=dev` with no lockfile) there for
+   `vscode-languageclient` — a failure here is non-fatal and only disables live LSP features, not the
+   extension's own hand-rolled engine.
+5. **LSP** (for `lsp`/`all`, skipped with a warning if Node/npm failed step 1): `npm install`, `npm run build`,
+   then `npm install -g` from `editor/server/` so `cast-language-server` resolves from any project afterward.
+6. **Summary**: one ✔/!/✘ line per thing attempted.
+
 ## Settings
 
 | Setting | Default | |
