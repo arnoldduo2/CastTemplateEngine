@@ -241,7 +241,7 @@ final class Directives
     {
         $this->pos += strlen($matched);
         $fn = self::FUNCTION_DIRECTIVES[$word];
-        $args = preg_match('/\G\s*\(/', $this->src, $_, 0, $this->pos) ? $this->parenthesised($word, $line) : '';
+        $args = preg_match('/\G\s*\(/', $this->src, $_, 0, $this->pos) ? $this->parenthesised($word, $line, true) : '';
         if ($word === 'includes') {
             if (preg_match('/\G[ \t]*;/', $this->src, $sm, 0, $this->pos)) {
                 $this->pos += strlen($sm[0]);
@@ -577,14 +577,14 @@ final class Directives
 
     // ------------------------------------------------------------------ parsing
 
-    private function parenthesised(string $word, int $line): string
+    private function parenthesised(string $word, int $line, bool $allowEmpty = false): string
     {
         preg_match('/\G\s*/', $this->src, $m, 0, $this->pos);
         $at = $this->pos + strlen($m[0]);
         if (($this->src[$at] ?? '') !== '(') $this->fail("@$word needs an expression in parentheses: @$word (...)", $line);
         $code = $this->balanced($at, '(', ')');
         $this->pos = $at + strlen($code) + 2;
-        if (trim($code) === '') $this->fail("@$word () has nothing in it", $line);
+        if (!$allowEmpty && trim($code) === '') $this->fail("@$word () has nothing in it", $line);
         return trim($code);
     }
 

@@ -2,6 +2,10 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 3.0.6
+
+- **Function directives with empty parentheses and default parameters**: `@route()`, `@csrf()`, `@alerts()`, `@modules()`, etc. now permit empty parentheses (`()`) or optional whitespace inside parentheses instead of throwing `@directive () has nothing in it`. This allows helper functions with default parameters (such as `route(string $url = '/')`) to be called cleanly as `@route()` without requiring an explicit argument or omitting the parentheses entirely.
+
 ## 3.0.5
 
 - **Phpactor hover error sanitization**: `PhpDelegation.hover()` in `cast-language-server` now validates hover responses from the Phpactor LSP backend before forwarding. Phpactor's `HoverHandler` returns raw exception strings (e.g. `Could not find source with "..."`, `Could not find container class`, `Class ... has no method/property/constant`, `Could not resolve reserved word`) wrapped in standard hover payloads when symbol reflection fails. The server now detects and drops these error messages, returning `null` so the editor falls back gracefully to template-level hovers instead of displaying raw exception tooltips.

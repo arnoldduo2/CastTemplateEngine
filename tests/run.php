@@ -621,6 +621,20 @@ test('@includes compiles to a void call to __includes(), preventing double echo 
     );
 });
 
+test('function directives (@route, @csrf, @alerts) support bare, empty parentheses, and arguments', function () {
+    $directives = new \CastTemplateEngine\Directives();
+    same('<?= route() ?>', $directives->compile('@route()'));
+    same('<?= route() ?>', $directives->compile('@route(   )'));
+    same('<?= route() ?>', $directives->compile('@route'));
+    same("<?= route('/about') ?>", $directives->compile("@route('/about')"));
+    same('<?= __csrf() ?>', $directives->compile('@csrf()'));
+    same('<?= __getAlerts() ?>', $directives->compile('@alerts()'));
+    same(
+        '<meta id="base_url" href="<?= route() ?>" />',
+        (new \CastTemplateEngine\Compiler(sys_get_temp_dir(), sys_get_temp_dir()))->compile('<meta id="base_url" href=@route() />')
+    );
+});
+
 test('CastTemplate::renderComponent direct rendering', function () {
     global $engine;
     $html = $engine->renderComponent('Badge', ['text' => 'Direct']);
