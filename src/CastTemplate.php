@@ -327,8 +327,8 @@ final class CastTemplate
             // thrown by the template itself (a warning turned into an exception, a compile error...)
             [$file, $changed] = [$source, true];
         } elseif (isset($trace[0]['file']) && self::sourceOf($e->getTrace()[0]['file'] ?? '') !== null) {
-            /* thrown by a function the template called directly (a helper that rejects its argument): the cause is the
-         call in the template */
+            // thrown by a function the template called directly (a helper that rejects its argument):
+            // the cause is the call in the template
             [$file, $line, $changed] = [$trace[0]['file'], (int) ($trace[0]['line'] ?? $line), true];
         }
         if (!$changed) return;
