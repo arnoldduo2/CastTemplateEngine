@@ -11,6 +11,7 @@ export declare class PhpDelegation {
     private readonly client;
     constructor(client: PhpLanguageClient);
     hover(document: CastDocument, position: Position): Promise<Hover | null>;
+    private isValidHover;
     completion(document: CastDocument, position: Position): Promise<CompletionItem[] | CompletionList | null>;
     definition(document: CastDocument, position: Position): Promise<PhpDefinition | null>;
     signatureHelp(document: CastDocument, position: Position): Promise<SignatureHelp | null>;

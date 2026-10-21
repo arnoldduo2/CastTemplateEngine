@@ -49,7 +49,27 @@ export class PhpDelegation {
     const target = await this.targetAt(document, position);
     if (!target) return null;
     const result = await this.client.request<Hover>('textDocument/hover', this.requestParams(target));
-    return result ? { ...result, range: result.range ? this.toSourceRange(document, target, result.range) ?? undefined : undefined } : null;
+    if (!result || !this.isValidHover(result)) return null;
+    return { ...result, range: result.range ? this.toSourceRange(document, target, result.range) ?? undefined : undefined };
+  }
+
+  private isValidHover(hover: Hover): boolean {
+    const contents = hover.contents;
+    const text = typeof contents === 'string'
+      ? contents
+      : 'value' in contents
+        ? contents.value
+        : Array.isArray(contents)
+          ? contents.map(c => (typeof c === 'string' ? c : c.value)).join('\n')
+          : '';
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    // Phpactor returns raw exception / issue messages as hover text when symbol reflection fails
+    if (/^Could not find source with\b/i.test(trimmed)) return false;
+    if (/^Could not find container class\b/i.test(trimmed)) return false;
+    if (/^Class .* has no (method|property|constant)\b/i.test(trimmed)) return false;
+    if (/^Could not resolve reserved word\b/i.test(trimmed)) return false;
+    return true;
   }
 
   public async completion(document: CastDocument, position: Position): Promise<CompletionItem[] | CompletionList | null> {

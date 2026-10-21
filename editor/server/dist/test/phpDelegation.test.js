@@ -62,4 +62,20 @@ const phpDelegation_js_1 = require("../features/phpDelegation.js");
     const result = await delegation.definition(document, { line: 0, character: 6 });
     strict_1.default.equal(result, null, 'an unmappable location is dropped rather than returned pointing at the virtual document');
 });
+(0, node_test_1.default)('hover drops Phpactor error message (Could not find source with) instead of showing it to the user', async () => {
+    const document = new castParser_js_1.CastParser().parse('file:///view.cast.php', '@php(testFunction($value))');
+    const client = {
+        async synchronize() { },
+        async request(method) {
+            strict_1.default.equal(method, 'textDocument/hover');
+            return {
+                contents: { kind: 'markdown', value: 'Could not find source with "testFunction"' },
+                range: { start: { line: 2, character: 15 }, end: { line: 2, character: 27 } }
+            };
+        }
+    };
+    const delegation = new phpDelegation_js_1.PhpDelegation(client);
+    const result = await delegation.hover(document, { line: 0, character: 6 });
+    strict_1.default.equal(result, null, 'Phpactor error hovers must be dropped');
+});
 //# sourceMappingURL=phpDelegation.test.js.map

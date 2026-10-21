@@ -2,6 +2,12 @@
 
 All notable changes are listed here. This project follows [Semantic Versioning](https://semver.org).
 
+## 3.0.5
+
+- **Phpactor hover error sanitization**: `PhpDelegation.hover()` in `cast-language-server` now validates hover responses from the Phpactor LSP backend before forwarding. Phpactor's `HoverHandler` returns raw exception strings (e.g. `Could not find source with "..."`, `Could not find container class`, `Class ... has no method/property/constant`, `Could not resolve reserved word`) wrapped in standard hover payloads when symbol reflection fails. The server now detects and drops these error messages, returning `null` so the editor falls back gracefully to template-level hovers instead of displaying raw exception tooltips.
+- **Explicit `cwd` for Phpactor subprocess**: `PhpactorClient.start()` now explicitly sets `cwd: workspaceFolders[0] || process.cwd()` when spawning `phpactor.phar`, guaranteeing proper workspace path resolution on Windows.
+- **Regression test coverage**: added unit tests in `editor/server/src/test/phpDelegation.test.ts` verifying that `Could not find source with` responses from Phpactor are dropped.
+
 ## 3.0.4
 
 - **@includes void compilation**: compiles @includes('name', \) as a void PHP statement <?php __includes(...); ?> rather than <?= __includes(...) ?>. Because __includes() / View::partial() already echoes the rendered partial directly to the output buffer, emitting an echo tag caused duplicate rendering of included templates (such as headers and footers). Consumes trailing semicolons cleanly.

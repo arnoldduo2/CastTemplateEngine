@@ -66,3 +66,22 @@ test('a definition whose range cannot be mapped back to source is dropped, not l
 
   assert.equal(result, null, 'an unmappable location is dropped rather than returned pointing at the virtual document');
 });
+
+test('hover drops Phpactor error message (Could not find source with) instead of showing it to the user', async () => {
+  const document = new CastParser().parse('file:///view.cast.php', '@php(testFunction($value))');
+  const client: PhpLanguageClient = {
+    async synchronize() {},
+    async request<T>(method: string): Promise<T | null> {
+      assert.equal(method, 'textDocument/hover');
+      return {
+        contents: { kind: 'markdown', value: 'Could not find source with "testFunction"' },
+        range: { start: { line: 2, character: 15 }, end: { line: 2, character: 27 } }
+      } as T;
+    }
+  };
+  const delegation = new PhpDelegation(client);
+
+  const result = await delegation.hover(document, { line: 0, character: 6 });
+  assert.equal(result, null, 'Phpactor error hovers must be dropped');
+});
+

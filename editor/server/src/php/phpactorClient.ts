@@ -20,7 +20,11 @@ export class PhpactorClient implements PhpDiagnosticClient {
 
   public async start(workspaceFolders: string[]): Promise<void> {
     if (this.connection) return;
-    this.process = spawn(this.command.command, this.command.args, { stdio: 'pipe', windowsHide: true });
+    this.process = spawn(this.command.command, this.command.args, {
+      stdio: 'pipe',
+      windowsHide: true,
+      cwd: workspaceFolders[0] || process.cwd()
+    });
 
     let stderrOutput = '';
     this.process.stderr.on('data', (chunk) => {

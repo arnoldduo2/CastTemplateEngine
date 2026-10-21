@@ -457,3 +457,115 @@ Synchronized all discovered fixes from the active development environment (`erp-
 
 
 
+
+---
+
+## Session 5 Discoveries & Applied Fixes: Cast LSP Hover Errors & Phpactor Symbol Resolution
+
+### Overview
+When hovering over embedded PHP functions in `.cast.php` templates (specifically `htchars()`, `__modules()`, `__cast()`, and `config()` in `header.cast.php`), the editor displayed an error tooltip:
+```text
+Could not find source with "<symbol>"
+```
+This occurred even though the functions were properly declared in `_ide_helpers.php` and `vendor/anode/cast-framework/src/Helpers/core.php`.
+
+---
+
+### Root Cause Diagnosis
+
+1. **Phpactor Exception Leak in Hover Handler**:
+   Inside Phpactor's `HoverHandler::renderFunction()`:
+   ```php
+   try {
+       $function = $this->reflector->reflectFunction($name);
+   } catch (NotFound $notFound) {
+       return $notFound->getMessage(); // "Could not find source with \"htchars\""
+   }
+   ```
+   When symbol reflection fails, Phpactor catches `NotFound` and returns the exception string instead of `null` or empty content. It then wraps that string into a standard LSP `Hover` response:
+   ```json
+   {
+     "contents": {
+       "kind": "markdown",
+       "value": "Could not find source with \"htchars\""
+     }
+   }
+   ```
+
+2. **Cast LSP Delegation Treated Errors As Valid Hovers**:
+   In [phpDelegation.ts](file:///d:/APPDEV/xampp/htdocs/CastTemplateEngine/editor/server/src/features/phpDelegation.ts), `PhpDelegation.hover()` blindly forwarded any non-null response returned by Phpactor:
+   ```typescript
+   const result = await this.client.request<Hover>('textDocument/hover', this.requestParams(target));
+   return result ? { ...result, range: ... } : null;
+   ```
+   Because `result` was truthy, [server.ts](file:///d:/APPDEV/xampp/htdocs/CastTemplateEngine/editor/server/src/server.ts) treated it as a valid hover, displayed the raw exception text to the user, and skipped calling `hoverProvider.getHover()`.
+
+3. **Missing Workspace Index & Windows Drive Letter Casing (`erp-spa-454d25` vs `erp-spa-478f2b`)**:
+   Non-class global PHP functions require Phpactor's file index (`~/.cache/phpactor/index/<project-id>`).
+   Phpactor derives `<project-id>` using `basename($projectRoot) . '-' . substr(md5(TextDocumentUri::fromString($projectRoot)->path()), 0, 6)`:
+   - **VS Code / LSP Client**: Sends `file:///d:/APPDEV/xampp/htdocs/erp-spa` (lowercase `d:`), which hashes to `erp-spa-454d25`.
+   - **PowerShell / CLI**: Uses `D:\APPDEV\xampp\htdocs\erp-spa` (uppercase `D:`), which hashes to `erp-spa-478f2b`.
+
+   The index for `erp-spa-454d25` was unbuilt or incomplete. As a result, Phpactor threw `NotFound` whenever the editor requested hover for global helper functions.
+
+4. **Missing Explicit `cwd` on Subprocess Spawn**:
+   In [phpactorClient.ts](file:///d:/APPDEV/xampp/htdocs/CastTemplateEngine/editor/server/src/php/phpactorClient.ts), `spawn(this.command.command, this.command.args)` did not explicitly specify `cwd: workspaceFolders[0]`.
+
+---
+
+### Applied Fixes
+
+1. **Hover Error Sanitization**:
+   Updated [phpDelegation.ts](file:///d:/APPDEV/xampp/htdocs/CastTemplateEngine/editor/server/src/features/phpDelegation.ts) to validate Phpactor's hover contents before forwarding:
+   ```typescript
+   public async hover(document: CastDocument, position: Position): Promise<Hover | null> {
+     const target = await this.targetAt(document, position);
+     if (!target) return null;
+     const result = await this.client.request<Hover>('textDocument/hover', this.requestParams(target));
+     if (!result || !this.isValidHover(result)) return null;
+     return { ...result, range: result.range ? this.toSourceRange(document, target, result.range) ?? undefined : undefined };
+   }
+
+   private isValidHover(hover: Hover): boolean {
+     const contents = hover.contents;
+     const text = typeof contents === 'string'
+       ? contents
+       : 'value' in contents
+         ? contents.value
+         : Array.isArray(contents)
+           ? contents.map(c => (typeof c === 'string' ? c : c.value)).join('\n')
+           : '';
+     const trimmed = text.trim();
+     if (!trimmed) return false;
+     // Phpactor returns raw exception / issue messages as hover text when symbol reflection fails
+     if (/^Could not find source with\b/i.test(trimmed)) return false;
+     if (/^Could not find container class\b/i.test(trimmed)) return false;
+     if (/^Class .* has no (method|property|constant)\b/i.test(trimmed)) return false;
+     if (/^Could not resolve reserved word\b/i.test(trimmed)) return false;
+     return true;
+   }
+   ```
+
+2. **Explicit `cwd` in `PhpactorClient`**:
+   Updated [phpactorClient.ts](file:///d:/APPDEV/xampp/htdocs/CastTemplateEngine/editor/server/src/php/phpactorClient.ts) so Phpactor always executes within the workspace folder:
+   ```typescript
+   this.process = spawn(this.command.command, this.command.args, {
+     stdio: 'pipe',
+     windowsHide: true,
+     cwd: workspaceFolders[0] || process.cwd()
+   });
+   ```
+
+3. **Full Index Population for Normalized Path**:
+   Ran `phpactor index:build -d d:/APPDEV/xampp/htdocs/erp-spa` across all 4,414 files. The cache directory `erp-spa-454d25` is now populated with all function indices (`htchars`, `__modules`, `__cast`, `config`, etc.).
+
+4. **Regression Test Added**:
+   Added a test in [phpDelegation.test.ts](file:///d:/APPDEV/xampp/htdocs/CastTemplateEngine/editor/server/src/test/phpDelegation.test.ts) to ensure that `Could not find source with` responses from Phpactor are always dropped and return `null`. All 52 tests pass cleanly.
+
+5. **LSP Restart & Verification**:
+   Rebuilt the TypeScript server bundle and restarted the background `cast-language-server` and `phpactor` daemons. Hovering over `htchars`, `__modules`, `__cast`, and `config` now correctly returns their formatted PHP docblocks and signatures:
+   - `htchars(mixed $str): string`
+   - `config(array|string $key, mixed $default): mixed`
+   - `__cast(string $guard): string`
+   - `__modules(string $name, string $type, int $levels, bool $withAuth): string`
+

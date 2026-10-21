@@ -17,7 +17,11 @@ class PhpactorClient {
     async start(workspaceFolders) {
         if (this.connection)
             return;
-        this.process = (0, child_process_1.spawn)(this.command.command, this.command.args, { stdio: 'pipe', windowsHide: true });
+        this.process = (0, child_process_1.spawn)(this.command.command, this.command.args, {
+            stdio: 'pipe',
+            windowsHide: true,
+            cwd: workspaceFolders[0] || process.cwd()
+        });
         let stderrOutput = '';
         this.process.stderr.on('data', (chunk) => {
             stderrOutput += chunk.toString();

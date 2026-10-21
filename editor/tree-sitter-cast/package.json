@@ -1,6 +1,6 @@
 {
   "name": "tree-sitter-cast",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "description": "Tree-sitter grammar for Cast template engine (.cast.php)",
   "main": "bindings/node",
   "types": "bindings/node",
